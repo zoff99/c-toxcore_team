@@ -73,6 +73,9 @@ typedef enum Message_Type {
 #define PACKET_ID_LOSSLESS_RANGE_SIZE 32
 #define PACKET_LOSSY_AV_RESERVED 8 // Number of lossy packet types at start of range reserved for A/V.
 
+/* video via lossless packets */
+#define PACKET_LOSSLESS_VIDEO 171
+
 typedef struct Messenger_Options {
     bool ipv6enabled;
     bool udp_disabled;
