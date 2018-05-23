@@ -1194,6 +1194,9 @@ bool toxav_video_send_frame(ToxAV *av, uint32_t friend_number, uint16_t width, u
     }
 
     if (call->video.second->video_keyframe_method == TOXAV_ENCODER_KF_METHOD_NORMAL) {
+        // if want keyframe:
+        //x264_encoder_intra_refresh(st->x264);
+
         if (call->video.first->ssrc < VIDEO_SEND_X_KEYFRAMES_FIRST) {
             //if (call->video.first->ssrc == 0)
             //{
@@ -1353,8 +1356,30 @@ bool toxav_video_send_frame(ToxAV *av, uint32_t friend_number, uint16_t width, u
                 goto END;
             }
 
-        } else {
+        } else if (call->video.second->video_encoder_coded_used == TOXAV_ENCODER_CODEC_USED_H264) {
+            x264_picture_init(&pic_in);
+
+            //pic_in.i_type = update ? X264_TYPE_IDR : X264_TYPE_AUTO;
+            //pic_in.i_qpplus1 = 0;
+            //pic_in.i_pts = ++st->pts;
+
+            //pic_in.img.i_csp = csp;
+            //pic_in.img.i_plane = pln;
+            for (i=0; i<pln; i++) {
+                pic_in.img.i_stride[i] = frame->linesize[i];
+                pic_in.img.plane[i]    = frame->data[i];
+            }
+            ret = x264_encoder_encode(st->x264, &nal, &i_nal, &pic_in, &pic_out);
+            if (ret < 0) {
+                fprintf(stderr, "x264 [error]: x264_encoder_encode failed\n");
+            }
+            if (i_nal == 0)
+                return 0;
+            
             // HINT: H264
+        }
+        else {
+            // Error out
         }
     }
 
@@ -1427,6 +1452,47 @@ bool toxav_video_send_frame(ToxAV *av, uint32_t friend_number, uint16_t width, u
 
         } else {
             // HINT: H264
+            
+            err = 0;
+            for (i=0; i<i_nal && !err; i++) {
+                const uint8_t hdr = nal[i].i_ref_idc<<5 | nal[i].i_type<<0;
+                int offset = 0;
+
+        #if X264_BUILD >= 76
+                const uint8_t *p = nal[i].p_payload;
+
+                /* Find the NAL Escape code [00 00 01] */
+                if (nal[i].i_payload > 4 && p[0] == 0x00 && p[1] == 0x00) {
+                    if (p[2] == 0x00 && p[3] == 0x01)
+                        offset = 4 + 1;
+                    else if (p[2] == 0x01)
+                        offset = 3 + 1;
+                }
+        #endif
+
+                /* skip Supplemental Enhancement Information (SEI) */
+                if (nal[i].i_type == H264_NAL_SEI)
+                    continue;
+
+                   int res = rtp_send_data
+                              (
+                                  call->video.first,
+                                  (const uint8_t *)pkt->data.frame.buf,
+                                  frame_length_in_bytes,
+                                  keyframe,
+                                  video_frame_record_timestamp,
+                                  (int32_t)pkt->data.frame.partition_id,
+                                  av->m->log
+                              );
+
+/*
+                err = h264_nal_send(true, true, (i+1)==i_nal, hdr,
+                            nal[i].p_payload + offset,
+                            nal[i].i_payload - offset,
+                            st->encprm.pktsize, st->pkth, st->arg);
+                            * */
+            }
+
         }
 
     }
