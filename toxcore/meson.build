@@ -1,0 +1,59 @@
+libtoxcore_files = files(
+	'ccompat.h',
+	'DHT.h',
+	'DHT.c',
+	'network.h',
+	'network.c',
+	'crypto_core.h',
+	'crypto_core.c',
+	'crypto_core_mem.c',
+	'ping_array.h',
+	'ping_array.c',
+	'net_crypto.h',
+	'net_crypto.c',
+	'friend_requests.h',
+	'friend_requests.c',
+	'LAN_discovery.h',
+	'LAN_discovery.c',
+	'friend_connection.h',
+	'friend_connection.c',
+	'Messenger.h',
+	'Messenger.c',
+	'ping.h',
+	'ping.c',
+	'tox.h',
+	'tox.c',
+	'tox_api.c',
+	'util.h',
+	'util.c',
+	'group.h',
+	'group.c',
+	'onion.h',
+	'onion.c',
+	'logger.h',
+	'logger.c',
+	'onion_announce.h',
+	'onion_announce.c',
+	'onion_client.h',
+	'onion_client.c',
+	'TCP_client.h',
+	'TCP_client.c',
+	'TCP_server.h',
+	'TCP_server.c',
+	'TCP_connection.h',
+	'TCP_connection.c',
+	'list.c',
+	'list.h'
+)
+
+
+libtoxcore = static_library(
+	'toxcore',
+	libtoxcore_files,
+	dependencies: sodium
+  
+  #include_directories : inc_common,
+  #cpp_args: internal_args,
+)
+
+
