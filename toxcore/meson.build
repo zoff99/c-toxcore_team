@@ -43,7 +43,8 @@ libtoxcore_files = files(
 	'TCP_connection.h',
 	'TCP_connection.c',
 	'list.c',
-	'list.h'
+	'list.h',
+	'../toxutil/toxutil.c'
 )
 
 libtoxcore = static_library(
