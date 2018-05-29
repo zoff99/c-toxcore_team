@@ -13,6 +13,7 @@ endif
 sodium = dependency('libsodium')
 
 # ToxAV dependencies
+threads = dependency('threads')
 opus = dependency('opus')
 vpx = dependency('vpx')
 avcodec = dependency('libavcodec')
@@ -20,8 +21,8 @@ avutil = dependency('libavutil')
 x264 = dependency('x264')
 
 # av_test dependencies
-opencv = dependency('opencv')
-portaudio = dependency('portaudio-2.0')
+opencv = dependency('opencv', required: false)
+portaudio = dependency('portaudio-2.0', required: false)
 
 subdir('toxcore')
 subdir('toxav')
@@ -33,13 +34,21 @@ subdir('toxav')
 #	c_args: special_args,
 #	dependencies: deps)
 
-#toxcore_dep = declare_dependency(
-#	
-#	)
+
+# A workaround to represent the final include directory structure
+#configure_file(input: 'toxcore/tox.h', install_dir: 'tox', output: 'tox.h',
+#	configuration: configuration_data())
+
+toxcore = declare_dependency(
+	link_with: libtoxcore
+	)
+
+toxav = declare_dependency(
+	link_with: libtoxav
+	)
 
 executable('av_test', 'testing/av_test.c',
-	link_with: [libtoxcore, libtoxav],
-	dependencies: [opencv, portaudio],
+	dependencies: [toxcore, toxav, opencv, portaudio],
 	c_args: ['-x', 'c++']
 )
 
