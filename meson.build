@@ -27,25 +27,21 @@ portaudio = dependency('portaudio-2.0', required: false)
 subdir('toxcore')
 subdir('toxav')
 
-#toxcore_files
+subdir('tox')
 
-#toxcore_lib('toxcore',
-#	toxcore_files,
-#	c_args: special_args,
-#	dependencies: deps)
-
-
-# A workaround to represent the final include directory structure
-#configure_file(input: 'toxcore/tox.h', install_dir: 'tox', output: 'tox.h',
-#	configuration: configuration_data())
+incdir = include_directories('.')
 
 toxcore = declare_dependency(
-	link_with: libtoxcore
+	link_with: libtoxcore,
+	include_directories: incdir,
+	sources: headers
 	)
 
 toxav = declare_dependency(
-	link_with: libtoxav
+	link_with: libtoxav,
+	include_directories: incdir
 	)
+
 
 executable('av_test', 'testing/av_test.c',
 	dependencies: [toxcore, toxav, opencv, portaudio],
