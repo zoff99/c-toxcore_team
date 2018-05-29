@@ -46,7 +46,6 @@ libtoxcore_files = files(
 	'list.h'
 )
 
-
 libtoxcore = static_library(
 	'toxcore',
 	libtoxcore_files,
@@ -56,4 +55,4 @@ libtoxcore = static_library(
   #cpp_args: internal_args,
 )
 
-
+install_headers('tox.h', subdir: 'tox')
