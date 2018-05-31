@@ -24,4 +24,3 @@ include ../other/Makefile.inc
 include ../testing/Makefile.inc
 include ../other/bootstrap_daemon/src/Makefile.inc
 include ../auto_tests/Makefile.inc
-
