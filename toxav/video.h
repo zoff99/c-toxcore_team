@@ -96,7 +96,7 @@ VPX_DL_BEST_QUALITY   (0)       deadline parameter analogous to VPx BEST QUALITY
 
 // #define VIDEO_PTS_TIMESTAMPS 1
 
-#define VIDEO_SEND_X_KEYFRAMES_FIRST (3) // force the first n frames to be keyframes!
+#define VIDEO_SEND_X_KEYFRAMES_FIRST (4) // force the first n frames to be keyframes!
 #define VPX_MAX_DIST_START (100)
 
 
@@ -215,7 +215,7 @@ void vc_kill_vpx(VCSession *vc);
 bool vc_encode_frame_vpx(ToxAV *av, uint32_t friend_number, uint16_t width, uint16_t height, const uint8_t *y,
                             const uint8_t *u, const uint8_t *v, TOXAV_ERR_SEND_FRAME *error); 
 int vc_decode_frame_vpx(VCSession *vc, struct RTPHeader* header_v3, uint8_t *data, uint32_t data_len);                      
-void video_switch_decoder_vpx(VCSession *vc);
+void video_switch_decoder_vpx(VCSession *vc, TOXAV_ENCODER_CODEC_USED_VALUE decoder_to_use);
 int vc_reconfigure_encoder_vpx(Logger *log, VCSession *vc, uint32_t bit_rate, uint16_t width, uint16_t height,
                                int16_t kf_max_dist);
 int vc_reconfigure_encoder_bitrate_only_vpx(VCSession *vc, uint32_t bit_rate);
@@ -227,7 +227,7 @@ void vc_kill_h264(VCSession *vc);
 bool vc_encode_frame_h264(ToxAV *av, uint32_t friend_number, uint16_t width, uint16_t height, const uint8_t *y,
                             const uint8_t *u, const uint8_t *v, TOXAV_ERR_SEND_FRAME *error); 
 int vc_decode_frame_h264(VCSession *vc, struct RTPHeader* header_v3, uint8_t *data, uint32_t data_len);
-void video_switch_decoder_h264(VCSession *vc);
+void video_switch_decoder_h264(VCSession *vc, TOXAV_ENCODER_CODEC_USED_VALUE decoder_to_use);
 int vc_reconfigure_encoder_h264(Logger *log, VCSession *vc, uint32_t bit_rate, uint16_t width, uint16_t height,
                                int16_t kf_max_dist);
 int vc_reconfigure_encoder_bitrate_only_h264(VCSession *vc, uint32_t bit_rate);

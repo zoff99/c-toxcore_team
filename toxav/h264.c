@@ -4,7 +4,7 @@
 // H264 settings -----------
 #define x264_param_profile_str "high"
 #define VIDEO_BITRATE_INITIAL_VALUE_H264 3000
-#define VIDEO_MAX_KF_H264 52
+#define VIDEO_MAX_KF_H264 50
 #define VIDEO_BUF_FACTOR_H264 4
 #define VIDEO_F_RATE_TOLERANCE_H264 1.2
 #define VIDEO_BITRATE_FACTOR_H264 0.7
@@ -30,6 +30,7 @@ VCSession *vc_new_h264(Logger *log, ToxAV *av, uint32_t friend_number, toxav_vid
     vc->h264_enc_width = param.i_width;
     vc->h264_enc_height = param.i_height;
     param.i_threads = 3;
+    param.b_deterministic = 1;
     // param.b_open_gop = 20;
     param.i_keyint_max = VIDEO_MAX_KF_H264;
     // param.rc.i_rc_method = X264_RC_CRF; // X264_RC_ABR;
@@ -81,8 +82,7 @@ VCSession *vc_new_h264(Logger *log, ToxAV *av, uint32_t friend_number, toxav_vid
 
     avcodec_register_all();
 
-    //codec = avcodec_find_decoder(AV_CODEC_ID_H264);
-    codec = avcodec_find_decoder_by_name("h264");
+    codec = avcodec_find_decoder(AV_CODEC_ID_H264);
 
 
     if (!codec) {
@@ -162,9 +162,10 @@ int vc_decode_frame_h264(VCSession *vc, struct RTPHeader* header_v3, uint8_t *da
     compr_data->post = -1;
 #endif
 
-    // HINT: dirty hack to add FF_INPUT_BUFFER_PADDING_SIZE bytes!!
+    // HINT: dirty hack to add FF_INPUT_BUFFER_PADDING_SIZE bytes!! ----------
     uint8_t *tmp_buf = calloc(1, data_len + FF_INPUT_BUFFER_PADDING_SIZE);
     memcpy(tmp_buf, data, data_len);
+    // HINT: dirty hack to add FF_INPUT_BUFFER_PADDING_SIZE bytes!! ----------
 
     compr_data->data = tmp_buf; // p->data;
     compr_data->size = (int)data_len; // hmm, "int" again
@@ -210,8 +211,10 @@ int vc_decode_frame_h264(VCSession *vc, struct RTPHeader* header_v3, uint8_t *da
     }
 
     av_packet_free(&compr_data);
+    // HINT: dirty hack to add FF_INPUT_BUFFER_PADDING_SIZE bytes!!
     free(tmp_buf);
-    // HINT: H264 decode ----------------
+    // HINT: dirty hack to add FF_INPUT_BUFFER_PADDING_SIZE bytes!!
+    
 }
 
 int vc_reconfigure_encoder_h264(Logger *log, VCSession *vc, uint32_t bit_rate, uint16_t width, uint16_t height,
@@ -223,7 +226,8 @@ int vc_reconfigure_encoder_h264(Logger *log, VCSession *vc, uint32_t bit_rate, u
 
     if ((vc->h264_enc_width != width) ||
             (vc->h264_enc_height != height) ||
-            (vc->h264_enc_bitrate != bit_rate)
+            (vc->h264_enc_bitrate != bit_rate) ||
+            (kf_max_dist == -2)
        ) {
         // input image size changed
 
@@ -242,6 +246,7 @@ int vc_reconfigure_encoder_h264(Logger *log, VCSession *vc, uint32_t bit_rate, u
         vc->h264_enc_width = param.i_width;
         vc->h264_enc_height = param.i_height;
         param.i_threads = 3;
+        param.b_deterministic = 1;
         // param.b_open_gop = 20;
         param.i_keyint_max = VIDEO_MAX_KF_H264;
         // param.rc.i_rc_method = X264_RC_ABR;
@@ -297,66 +302,3 @@ int vc_reconfigure_encoder_h264(Logger *log, VCSession *vc, uint32_t bit_rate, u
 
     return 0;
 }
-
-int vc_reconfigure_encoder_bitrate_only_h264(VCSession *vc, uint32_t bit_rate)
-{
-    if (!vc) {
-        return -1;
-    }
-
-    if (vc->h264_enc_bitrate != bit_rate) {
-
-        x264_param_t param;
-
-        if (x264_param_default_preset(&param, "ultrafast", "zerolatency") < 0) {
-            // goto fail;
-        }
-
-        /* Configure non-default params */
-        // param.i_bitdepth = 8;
-        param.i_csp = X264_CSP_I420;
-        param.i_width  = vc->h264_enc_width;
-        param.i_height = vc->h264_enc_height;
-        param.i_threads = 3;
-        // param.b_open_gop = 20;
-        param.i_keyint_max = VIDEO_MAX_KF_H264;
-        // param.rc.i_rc_method = X264_RC_ABR;
-
-        param.b_vfr_input = 1; /* VFR input.  If 1, use timebase and timestamps for ratecontrol purposes.
-                            * If 0, use fps only. */
-        param.i_timebase_num = 1;       // 1 ms = timebase units = (1/1000)s
-        param.i_timebase_den = 1000;   // 1 ms = timebase units = (1/1000)s
-        param.b_repeat_headers = 1;
-        param.b_annexb = 1;
-
-        param.rc.f_rate_tolerance = VIDEO_F_RATE_TOLERANCE_H264;
-        param.rc.i_vbv_buffer_size = (bit_rate / 1000) * VIDEO_BUF_FACTOR_H264;
-        param.rc.i_vbv_max_bitrate = (bit_rate / 1000) * 1;
-
-        // param.rc.i_bitrate = (bit_rate / 1000) * VIDEO_BITRATE_FACTOR_H264;
-        vc->h264_enc_bitrate = bit_rate;
-
-        /* Apply profile restrictions. */
-        if (x264_param_apply_profile(&param,
-                                     x264_param_profile_str) < 0) { // "baseline", "main", "high", "high10", "high422", "high444"
-            // goto fail;
-        }
-
-        // free old stuff ---------
-        x264_encoder_close(vc->h264_encoder);
-        x264_picture_clean(&(vc->h264_in_pic));
-        // free old stuff ---------
-
-        // alloc with new values -------
-        if (x264_picture_alloc(&(vc->h264_in_pic), param.i_csp, param.i_width, param.i_height) < 0) {
-            // goto fail;
-        }
-
-        vc->h264_encoder = x264_encoder_open(&param);
-        // alloc with new values -------
-
-    }
-
-    return 0;
-}
-

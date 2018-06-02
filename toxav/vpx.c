@@ -106,6 +106,12 @@ VCSession *vc_new_vpx(Logger *log, ToxAV *av, uint32_t friend_number, toxav_vide
 
 
 
+
+
+
+
+
+
     /* Set encoder to some initial values
      */
     vpx_codec_enc_cfg_t  cfg;
@@ -448,19 +454,7 @@ int vc_decode_frame_vpx(VCSession *vc, struct RTPHeader* header_v3, uint8_t *dat
 
     if (rc != VPX_CODEC_OK) {
         if ((rc == VPX_CODEC_CORRUPT_FRAME) || (rc == VPX_CODEC_UNSUP_BITSTREAM)) {
-            LOGGER_WARNING(vc->log, "Switching VPX Decoder");
-            video_switch_decoder(vc);
-
-            rc = vpx_codec_decode(vc->decoder, p->data, full_data_len, user_priv, VPX_DL_REALTIME);
-
-            if (rc != VPX_CODEC_OK) {
-                LOGGER_ERROR(vc->log, "There is still an error decoding video: err-num=%d err-str=%s", (int)rc,
-                                vpx_codec_err_to_string(rc));
-
-                if (user_priv != NULL) {
-                    free(user_priv);
-                }
-            }
+            // LOGGER_ERROR(vc->log, "Error decoding video: VPX_CODEC_CORRUPT_FRAME or VPX_CODEC_UNSUP_BITSTREAM");
         } else {
             // LOGGER_ERROR(vc->log, "Error decoding video: err-num=%d err-str=%s", (int)rc, vpx_codec_err_to_string(rc));
         }
@@ -595,8 +589,7 @@ int vc_decode_frame_vpx(VCSession *vc, struct RTPHeader* header_v3, uint8_t *dat
     }
 }
 
-
-void video_switch_decoder_vpx(VCSession *vc)
+void video_switch_decoder_vpx(VCSession *vc, TOXAV_ENCODER_CODEC_USED_VALUE decoder_to_use)
 {
 
     /*
@@ -956,31 +949,3 @@ int vc_reconfigure_encoder_vpx(Logger *log, VCSession *vc, uint32_t bit_rate, ui
     return 0;
 }
 
-
-int vc_reconfigure_encoder_bitrate_only_vpx(VCSession *vc, uint32_t bit_rate)
-{
-    if (!vc) {
-        return -1;
-    }
-
-    vpx_codec_enc_cfg_t cfg2 = *vc->encoder->config.enc;
-    vpx_codec_err_t rc;
-
-    if (cfg2.rc_target_bitrate == bit_rate) {
-        return 0; /* Nothing changed */
-    }
-
-    /* bit rate changed */
-    LOGGER_WARNING(vc->log, "bitrate change (2) from: %u to: %u", (uint32_t)(cfg2.rc_target_bitrate / 1000),
-                   (uint32_t)(bit_rate / 1000));
-
-    cfg2.rc_target_bitrate = bit_rate;
-    rc = vpx_codec_enc_config_set(vc->encoder, &cfg2);
-
-    if (rc != VPX_CODEC_OK) {
-        LOGGER_ERROR(vc->log, "Failed to set (2) encoder control setting: %s", vpx_codec_err_to_string(rc));
-        return -1;
-    }
-
-    return 0;
-}
