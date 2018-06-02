@@ -15,6 +15,8 @@ libtoxav_files = files(
 	'../toxav/toxav.h',
 	'../toxav/toxav.c',
 	'../toxav/toxav_old.c',
+	'../toxav/vpx.c',
+	'../toxav/h264.c',
 )
 
 

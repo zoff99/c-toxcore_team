@@ -45,11 +45,21 @@
 // VPX Info: Time to spend encoding, in microseconds (it's a *soft* deadline)
 #define WANTED_MAX_ENCODER_FPS (40)
 #define MAX_ENCODE_TIME_US (1000000 / WANTED_MAX_ENCODER_FPS) // to allow x fps
+
+/*
+  Soft deadline the decoder should attempt to meet, in "us" (microseconds). Set to zero for unlimited.
+  By convention, the value 1 is used to mean "return as fast as possible."
+*/
+// TODO: don't hardcode this, let the application choose it
+#define WANTED_MAX_DECODER_FPS (20)
+#define MAX_DECODE_TIME_US (1000000 / WANTED_MAX_DECODER_FPS) // to allow x fps
+
 /*
 VPX_DL_REALTIME       (1)       deadline parameter analogous to VPx REALTIME mode.
 VPX_DL_GOOD_QUALITY   (1000000) deadline parameter analogous to VPx GOOD QUALITY mode.
 VPX_DL_BEST_QUALITY   (0)       deadline parameter analogous to VPx BEST QUALITY mode.
 */
+
 
 
 // Zoff --
@@ -195,5 +205,32 @@ int vc_queue_message(void *vcp, struct RTPMessage *msg);
 int vc_reconfigure_encoder(Logger *log, VCSession *vc, uint32_t bit_rate, uint16_t width, uint16_t height,
                            int16_t kf_max_dist);
 int vc_reconfigure_encoder_bitrate_only(VCSession *vc, uint32_t bit_rate);
+
+
+struct RTPHeader;
+
+VCSession *vc_new_vpx(Logger *log, ToxAV *av, uint32_t friend_number, toxav_video_receive_frame_cb *cb, void *cb_data,
+                      VCSession *vc);
+void vc_kill_vpx(VCSession *vc);
+bool vc_encode_frame_vpx(ToxAV *av, uint32_t friend_number, uint16_t width, uint16_t height, const uint8_t *y,
+                            const uint8_t *u, const uint8_t *v, TOXAV_ERR_SEND_FRAME *error); 
+int vc_decode_frame_vpx(VCSession *vc, struct RTPHeader* header_v3, uint8_t *data, uint32_t data_len);                      
+void video_switch_decoder_vpx(VCSession *vc);
+int vc_reconfigure_encoder_vpx(Logger *log, VCSession *vc, uint32_t bit_rate, uint16_t width, uint16_t height,
+                               int16_t kf_max_dist);
+int vc_reconfigure_encoder_bitrate_only_vpx(VCSession *vc, uint32_t bit_rate);
+
+
+VCSession *vc_new_h264(Logger *log, ToxAV *av, uint32_t friend_number, toxav_video_receive_frame_cb *cb, void *cb_data,
+                      VCSession *vc);
+void vc_kill_h264(VCSession *vc);
+bool vc_encode_frame_h264(ToxAV *av, uint32_t friend_number, uint16_t width, uint16_t height, const uint8_t *y,
+                            const uint8_t *u, const uint8_t *v, TOXAV_ERR_SEND_FRAME *error); 
+int vc_decode_frame_h264(VCSession *vc, struct RTPHeader* header_v3, uint8_t *data, uint32_t data_len);
+void video_switch_decoder_h264(VCSession *vc);
+int vc_reconfigure_encoder_h264(Logger *log, VCSession *vc, uint32_t bit_rate, uint16_t width, uint16_t height,
+                               int16_t kf_max_dist);
+int vc_reconfigure_encoder_bitrate_only_h264(VCSession *vc, uint32_t bit_rate);
+
 
 #endif /* VIDEO_H */
