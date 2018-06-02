@@ -225,6 +225,10 @@ VCSession *vc_new(Logger *log, ToxAV *av, uint32_t friend_number, toxav_video_re
     // HINT: initialize the H264 encoder
     vc = vc_new_h264(log, av, friend_number, cb, cb_data, vc);
 
+#ifdef RASPBERRY_PI
+    vc = vc_new_h264_omx(log, av, friend_number, cb, cb_data, vc);
+#endif
+
     // HINT: initialize VP8 encoder
     return vc_new_vpx(log, av, friend_number, cb, cb_data, vc);
 
@@ -244,6 +248,10 @@ void vc_kill(VCSession *vc)
 
     vc_kill_h264(vc);
     vc_kill_vpx(vc);
+
+#ifdef RASPBERRY_PI
+    vc_kill_h264_omx(vc);
+#endif 
 
     void *p;
     uint64_t dummy;
@@ -582,7 +590,11 @@ int vc_reconfigure_encoder(Logger *log, VCSession *vc, uint32_t bit_rate, uint16
     if (vc->video_encoder_coded_used == TOXAV_ENCODER_CODEC_USED_VP8) {
         return vc_reconfigure_encoder_vpx(log, vc, bit_rate, width, height, kf_max_dist);
     } else {
+#ifndef RASPBERRY_PI
         return vc_reconfigure_encoder_h264(log, vc, bit_rate, width, height, kf_max_dist);
+#else
+        return vc_reconfigure_encoder_h264_omx(log, vc, bit_rate, width, height, kf_max_dist);
+#endif
     }
 }
 

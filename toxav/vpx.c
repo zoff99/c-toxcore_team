@@ -2,6 +2,7 @@
 #include "ring_buffer.h"
 #include "rtp.h"
 
+#define VIDEO_MIN_SEND_KEYFRAME_INTERVAL 5000
 
 struct vpx_frame_user_data {
     uint64_t record_timestamp;
@@ -374,10 +375,159 @@ void vc_kill_vpx(VCSession *vc)
 
 
 
-bool vc_encode_frame_vpx(ToxAV *av, uint32_t friend_number, uint16_t width, uint16_t height, const uint8_t *y,
+bool vc_encode_frame_vpx(VCSession* vc, struct RTPSession* rtp, uint16_t width, uint16_t height, const uint8_t *y,
                             const uint8_t *u, const uint8_t *v, TOXAV_ERR_SEND_FRAME *error)
 {
-    
+    uint64_t video_frame_record_timestamp = current_time_monotonic();
+
+    int vpx_encode_flags = 0;
+    unsigned long max_encode_time_in_us = MAX_ENCODE_TIME_US;
+
+    if (vc->video_keyframe_method == TOXAV_ENCODER_KF_METHOD_NORMAL) {
+        if (rtp->ssrc < VIDEO_SEND_X_KEYFRAMES_FIRST) {
+
+            if (vc->video_encoder_coded_used != TOXAV_ENCODER_CODEC_USED_VP9) {
+                // Key frame flag for first frames
+                vpx_encode_flags = VPX_EFLAG_FORCE_KF;
+                vpx_encode_flags |= VP8_EFLAG_FORCE_GF;
+                // vpx_encode_flags |= VP8_EFLAG_FORCE_ARF;
+
+                max_encode_time_in_us = VPX_DL_REALTIME;
+                // uint32_t lowered_bitrate = (300 * 1000);
+                // vc_reconfigure_encoder_bitrate_only(vc, lowered_bitrate);
+                // HINT: Zoff: this does not seem to work
+                // vpx_codec_control(vc->encoder, VP8E_SET_FRAME_FLAGS, vpx_encode_flags);
+                // LOGGER_ERROR(vc->log, "I_FRAME_FLAG:%d only-i-frame mode", rtp->ssrc);
+            }
+
+
+            rtp->ssrc++;
+        } else if (rtp->ssrc == VIDEO_SEND_X_KEYFRAMES_FIRST) {
+            if (vc->video_encoder_coded_used != TOXAV_ENCODER_CODEC_USED_VP9) {
+                // normal keyframe placement
+                vpx_encode_flags = 0;
+                max_encode_time_in_us = MAX_ENCODE_TIME_US;
+                LOGGER_INFO(vc->log, "I_FRAME_FLAG:%d normal mode", rtp->ssrc);
+            }
+
+            rtp->ssrc++;
+        }
+    }
+
+    // we start with I-frames (full frames) and then switch to normal mode later
+
+    vc->last_encoded_frame_ts = current_time_monotonic();
+
+    if (vc->send_keyframe_request_received == 1) {
+        vpx_encode_flags = VPX_EFLAG_FORCE_KF;
+        vpx_encode_flags |= VP8_EFLAG_FORCE_GF;
+        // vpx_encode_flags |= VP8_EFLAG_FORCE_ARF;
+        vc->send_keyframe_request_received = 0;
+    } else {
+        if ((vc->last_sent_keyframe_ts + VIDEO_MIN_SEND_KEYFRAME_INTERVAL)
+                < current_time_monotonic()) {
+            // it's been x seconds without a keyframe, send one now
+            vpx_encode_flags = VPX_EFLAG_FORCE_KF;
+            vpx_encode_flags |= VP8_EFLAG_FORCE_GF;
+            // vpx_encode_flags |= VP8_EFLAG_FORCE_ARF;
+        } else {
+            // vpx_encode_flags |= VP8_EFLAG_FORCE_GF;
+            // vpx_encode_flags |= VP8_EFLAG_NO_REF_GF;
+            // vpx_encode_flags |= VP8_EFLAG_NO_REF_ARF;
+            // vpx_encode_flags |= VP8_EFLAG_NO_REF_LAST;
+            // vpx_encode_flags |= VP8_EFLAG_NO_UPD_GF;
+            // vpx_encode_flags |= VP8_EFLAG_NO_UPD_ARF;
+        }
+    }
+
+    vpx_image_t img;
+    img.w = img.h = img.d_w = img.d_h = 0;
+    vpx_img_alloc(&img, VPX_IMG_FMT_I420, width, height, 0);
+
+    /* I420 "It comprises an NxM Y plane followed by (N/2)x(M/2) V and U planes."
+        * http://fourcc.org/yuv.php#IYUV
+        */
+    memcpy(img.planes[VPX_PLANE_Y], y, width * height);
+    memcpy(img.planes[VPX_PLANE_U], u, (width / 2) * (height / 2));
+    memcpy(img.planes[VPX_PLANE_V], v, (width / 2) * (height / 2));
+
+#if 0
+    uint32_t duration = (ms_to_last_frame * 10) + 1;
+
+    if (duration > 10000) {
+        duration = 10000;
+    }
+
+#else
+    // set to hardcoded 24fps (this is only for vpx internal calculations!!)
+    uint32_t duration = (41 * 10); // HINT: 24fps ~= 41ms
+#endif
+
+    vpx_codec_err_t vrc = vpx_codec_encode(vc->encoder, &img,
+                                            (int64_t)video_frame_record_timestamp, duration,
+                                            vpx_encode_flags,
+                                            VPX_DL_REALTIME);
+
+    vpx_img_free(&img);
+
+    if (vrc != VPX_CODEC_OK) {
+        return TOXAV_ERR_SEND_FRAME_INVALID;
+    }
+
+
+    vpx_codec_iter_t iter = NULL;
+    const vpx_codec_cx_pkt_t *pkt;
+
+    while ((pkt = vpx_codec_get_cx_data(vc->encoder, &iter)) != NULL) {
+        if (pkt->kind == VPX_CODEC_CX_FRAME_PKT) {
+            const int keyframe = (pkt->data.frame.flags & VPX_FRAME_IS_KEY) != 0;
+
+            if (keyframe) {
+                vc->last_sent_keyframe_ts = current_time_monotonic();
+            }
+
+            if ((pkt->data.frame.flags & VPX_FRAME_IS_FRAGMENT) != 0) {
+                LOGGER_DEBUG(vc->log, "VPXENC:VPX_FRAME_IS_FRAGMENT:*yes* size=%lld pid=%d\n",
+                                (long long)pkt->data.frame.sz, (int)pkt->data.frame.partition_id);
+            } else {
+                LOGGER_DEBUG(vc->log, "VPXENC:VPX_FRAME_IS_FRAGMENT:-no- size=%lld pid=%d\n",
+                                (long long)pkt->data.frame.sz, (int)pkt->data.frame.partition_id);
+            }
+
+            // use the record timestamp that was actually used for this frame
+            video_frame_record_timestamp = (uint64_t)pkt->data.frame.pts;
+            // LOGGER_DEBUG(vc->log, "video packet record time: %llu", video_frame_record_timestamp);
+
+            // https://www.webmproject.org/docs/webm-sdk/structvpx__codec__cx__pkt.html
+            // pkt->data.frame.sz -> size_t
+            const uint32_t frame_length_in_bytes = pkt->data.frame.sz;
+
+
+            int res = rtp_send_data
+                        (
+                            rtp,
+                            (const uint8_t *)pkt->data.frame.buf,
+                            frame_length_in_bytes,
+                            keyframe,
+                            video_frame_record_timestamp,
+                            (int32_t)pkt->data.frame.partition_id,
+                            TOXAV_ENCODER_CODEC_USED_VP8,
+                            vc->log
+                        );
+
+            LOGGER_DEBUG(vc->log, "+ _sending_FRAME_TYPE_==%s bytes=%d frame_len=%d", keyframe ? "K" : ".",
+                            (int)pkt->data.frame.sz, (int)frame_length_in_bytes);
+            LOGGER_DEBUG(vc->log, "+ _sending_FRAME_ b0=%d b1=%d", ((const uint8_t *)pkt->data.frame.buf)[0] ,
+                            ((const uint8_t *)pkt->data.frame.buf)[1]);
+
+            video_frame_record_timestamp++;
+
+            if (res < 0) {
+                LOGGER_WARNING(vc->log, "Could not send video frame: %s", strerror(errno));
+                return TOXAV_ERR_SEND_FRAME_RTP_FAILED;
+            }
+        }
+    }
 }
 
 int vc_decode_frame_vpx(VCSession *vc, struct RTPHeader* header_v3, uint8_t *data, uint32_t data_len)

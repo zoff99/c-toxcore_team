@@ -125,10 +125,84 @@ void vc_kill_h264(VCSession *vc)
     avcodec_free_context(&vc->h264_decoder);
 }
 
-bool vc_encode_frame_h264(ToxAV *av, uint32_t friend_number, uint16_t width, uint16_t height, const uint8_t *y,
+bool vc_encode_frame_h264(VCSession *vc, struct RTPSession *rtp, uint16_t width, uint16_t height, const uint8_t *y,
                             const uint8_t *u, const uint8_t *v, TOXAV_ERR_SEND_FRAME *error)
 {
-    
+    uint64_t video_frame_record_timestamp = current_time_monotonic();
+
+    int res = 0;
+    // HINT: H264
+    // for the H264 encoder -------
+    x264_nal_t *nal = NULL;
+    int i_frame_size = 0;
+    // for the H264 encoder -------
+
+    memcpy(vc->h264_in_pic.img.plane[0], y, width * height);
+    memcpy(vc->h264_in_pic.img.plane[1], u, (width / 2) * (height / 2));
+    memcpy(vc->h264_in_pic.img.plane[2], v, (width / 2) * (height / 2));
+
+    int i_nal;
+
+    vc->h264_in_pic.i_pts = (int64_t)video_frame_record_timestamp;
+    i_frame_size = x264_encoder_encode(vc->h264_encoder,
+                                        &nal,
+                                        &i_nal,
+                                        &(vc->h264_in_pic),
+                                        &(vc->h264_out_pic));
+
+    if (i_frame_size < 0) {
+        // some error
+    } else if (i_frame_size == 0) {
+        // zero size output
+    } else {
+        // nal->p_payload --> outbuf
+        // i_frame_size --> out size in bytes
+
+        // LOGGER_ERROR(av->m->log, "H264: i_frame_size=%d nal_buf=%p KF=%d\n",
+        //             (int)i_frame_size,
+        //             nal->p_payload,
+        //             (int)session->h264_out_pic.b_keyframe
+        //            );
+
+    }
+
+    if (nal == NULL)
+    {
+        return -23; // TODO: proper error code?
+    }
+
+    if (nal->p_payload == NULL)
+    {
+        return -23; // TODO: proper error code?
+    }
+
+    // HINT: H264
+
+    if (i_frame_size > 0) {
+
+        // use the record timestamp that was actually used for this frame
+        video_frame_record_timestamp = (uint64_t)vc->h264_in_pic.i_pts;
+        const uint32_t frame_length_in_bytes = i_frame_size;
+        const int keyframe = (int)vc->h264_out_pic.b_keyframe;
+
+        res = rtp_send_data
+                    (
+                        rtp,
+                        (const uint8_t *)nal->p_payload,
+                        frame_length_in_bytes,
+                        keyframe,
+                        video_frame_record_timestamp,
+                        (int32_t)0,
+                        TOXAV_ENCODER_CODEC_USED_H264,
+                        vc->log
+                    );
+
+        video_frame_record_timestamp++;
+
+    }
+
+    return res;
+
 }
 int vc_decode_frame_h264(VCSession *vc, struct RTPHeader* header_v3, uint8_t *data, uint32_t data_len)
 {

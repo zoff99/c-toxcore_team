@@ -40,7 +40,6 @@
 
 #define VIDEO_ACCEPTABLE_LOSS (0.08f) /* if loss is less than this (8%), then don't do anything */
 #define AUDIO_ITERATATIONS_WHILE_VIDEO (2)
-#define VIDEO_MIN_SEND_KEYFRAME_INTERVAL 5000
 
 #if defined(AUDIO_DEBUGGING_SKIP_FRAMES)
 uint32_t _debug_count_sent_audio_frames = 0;
@@ -1079,8 +1078,6 @@ bool toxav_video_send_frame(ToxAV *av, uint32_t friend_number, uint16_t width, u
     TOXAV_ERR_SEND_FRAME rc = TOXAV_ERR_SEND_FRAME_OK;
     ToxAVCall *call;
 
-    uint64_t video_frame_record_timestamp = current_time_monotonic();
-
     if (m_friend_exists(av->m, friend_number) == 0) {
         rc = TOXAV_ERR_SEND_FRAME_FRIEND_NOT_FOUND;
         goto END;
@@ -1145,51 +1142,6 @@ bool toxav_video_send_frame(ToxAV *av, uint32_t friend_number, uint16_t width, u
         }
     }
 
-    int vpx_encode_flags = 0;
-    unsigned long max_encode_time_in_us = MAX_ENCODE_TIME_US;
-
-
-    if (call->video.second->video_keyframe_method == TOXAV_ENCODER_KF_METHOD_NORMAL) {
-        if (call->video.first->ssrc < VIDEO_SEND_X_KEYFRAMES_FIRST) {
-
-            if (call->video.second->video_encoder_coded_used != TOXAV_ENCODER_CODEC_USED_VP9) {
-                // Key frame flag for first frames
-                vpx_encode_flags = VPX_EFLAG_FORCE_KF;
-                vpx_encode_flags |= VP8_EFLAG_FORCE_GF;
-                // vpx_encode_flags |= VP8_EFLAG_FORCE_ARF;
-
-                max_encode_time_in_us = VPX_DL_REALTIME;
-                // uint32_t lowered_bitrate = (300 * 1000);
-                // vc_reconfigure_encoder_bitrate_only(call->video.second, lowered_bitrate);
-                // HINT: Zoff: this does not seem to work
-                // vpx_codec_control(call->video.second->encoder, VP8E_SET_FRAME_FLAGS, vpx_encode_flags);
-                // LOGGER_ERROR(av->m->log, "I_FRAME_FLAG:%d only-i-frame mode", call->video.first->ssrc);
-            }
-
-#if 1
-            if (call->video.second->video_encoder_coded_used == TOXAV_ENCODER_CODEC_USED_H264) {
-                // HINT: don't know yet how else to force real I-Frames on H264
-                vc_reconfigure_encoder(av->m->log, call->video.second,
-                                       call->video_bit_rate * 1000,
-                                       width, height, -2);
-                // LOGGER_ERROR(av->m->log, "I_FRAME_FLAG:%d only-i-frame mode", call->video.first->ssrc);
-            }
-#endif
-
-            call->video.first->ssrc++;
-        } else if (call->video.first->ssrc == VIDEO_SEND_X_KEYFRAMES_FIRST) {
-            if (call->video.second->video_encoder_coded_used != TOXAV_ENCODER_CODEC_USED_VP9) {
-                // normal keyframe placement
-                vpx_encode_flags = 0;
-                max_encode_time_in_us = MAX_ENCODE_TIME_US;
-                LOGGER_INFO(av->m->log, "I_FRAME_FLAG:%d normal mode", call->video.first->ssrc);
-            }
-
-            call->video.first->ssrc++;
-        }
-    }
-
-
 #ifdef VIDEO_ENCODER_SOFT_DEADLINE_AUTOTUNE
     long encode_time_auto_tune = MAX_ENCODE_TIME_US;
 
@@ -1244,235 +1196,36 @@ bool toxav_video_send_frame(ToxAV *av, uint32_t friend_number, uint16_t width, u
 #endif
 
 
-    // we start with I-frames (full frames) and then switch to normal mode later
-
-    call->video.second->last_encoded_frame_ts = current_time_monotonic();
-
-    if (call->video.second->send_keyframe_request_received == 1) {
-        vpx_encode_flags = VPX_EFLAG_FORCE_KF;
-        vpx_encode_flags |= VP8_EFLAG_FORCE_GF;
-        // vpx_encode_flags |= VP8_EFLAG_FORCE_ARF;
-        call->video.second->send_keyframe_request_received = 0;
-    } else {
-        if ((call->video.second->last_sent_keyframe_ts + VIDEO_MIN_SEND_KEYFRAME_INTERVAL)
-                < current_time_monotonic()) {
-            // it's been x seconds without a keyframe, send one now
-            vpx_encode_flags = VPX_EFLAG_FORCE_KF;
-            vpx_encode_flags |= VP8_EFLAG_FORCE_GF;
-            // vpx_encode_flags |= VP8_EFLAG_FORCE_ARF;
-        } else {
-            // vpx_encode_flags |= VP8_EFLAG_FORCE_GF;
-            // vpx_encode_flags |= VP8_EFLAG_NO_REF_GF;
-            // vpx_encode_flags |= VP8_EFLAG_NO_REF_ARF;
-            // vpx_encode_flags |= VP8_EFLAG_NO_REF_LAST;
-            // vpx_encode_flags |= VP8_EFLAG_NO_UPD_GF;
-            // vpx_encode_flags |= VP8_EFLAG_NO_UPD_ARF;
-        }
+#if 1
+    if (call->video.second->video_encoder_coded_used == TOXAV_ENCODER_CODEC_USED_H264) {
+        // HINT: don't know yet how else to force real I-Frames on H264
+        vc_reconfigure_encoder(av->m->log, call->video.second,
+                                call->video_bit_rate * 1000,
+                                width, height, -2);
+        // LOGGER_ERROR(vc->log, "I_FRAME_FLAG:%d only-i-frame mode", rtp->ssrc);
     }
+#endif
 
-
-    // for the H264 encoder -------
-    x264_nal_t *nal = NULL;
-    int i_frame_size = 0;
-    // for the H264 encoder -------
 
     { /* Encode */
-
-
         if ((call->video.second->video_encoder_coded_used == TOXAV_ENCODER_CODEC_USED_VP8)
                 || (call->video.second->video_encoder_coded_used == TOXAV_ENCODER_CODEC_USED_VP9)) {
 
-
-            vpx_image_t img;
-            img.w = img.h = img.d_w = img.d_h = 0;
-            vpx_img_alloc(&img, VPX_IMG_FMT_I420, width, height, 0);
-
-            /* I420 "It comprises an NxM Y plane followed by (N/2)x(M/2) V and U planes."
-             * http://fourcc.org/yuv.php#IYUV
-             */
-            memcpy(img.planes[VPX_PLANE_Y], y, width * height);
-            memcpy(img.planes[VPX_PLANE_U], u, (width / 2) * (height / 2));
-            memcpy(img.planes[VPX_PLANE_V], v, (width / 2) * (height / 2));
-
-#if 0
-            uint32_t duration = (ms_to_last_frame * 10) + 1;
-
-            if (duration > 10000) {
-                duration = 10000;
-            }
-
-#else
-            // set to hardcoded 24fps (this is only for vpx internal calculations!!)
-            uint32_t duration = (41 * 10); // HINT: 24fps ~= 41ms
-#endif
-
-            vpx_codec_err_t vrc = vpx_codec_encode(call->video.second->encoder, &img,
-                                                   (int64_t)video_frame_record_timestamp, duration,
-                                                   vpx_encode_flags,
-                                                   VPX_DL_REALTIME);
-
-            vpx_img_free(&img);
-
-            if (vrc != VPX_CODEC_OK) {
-                pthread_mutex_unlock(call->mutex_video);
-                LOGGER_ERROR(av->m->log, "Could not encode video frame: %s\n", vpx_codec_err_to_string(vrc));
-                rc = TOXAV_ERR_SEND_FRAME_INVALID;
-                goto END;
-            }
-
+            rc = vc_encode_frame_vpx(call->video.second, call->video.first, width, height, y, u, v, error);
         } else {
-            // HINT: H264
-
-            memcpy(call->video.second->h264_in_pic.img.plane[0], y, width * height);
-            memcpy(call->video.second->h264_in_pic.img.plane[1], u, (width / 2) * (height / 2));
-            memcpy(call->video.second->h264_in_pic.img.plane[2], v, (width / 2) * (height / 2));
-
-            int i_nal;
-
-            call->video.second->h264_in_pic.i_pts = (int64_t)video_frame_record_timestamp;
-            i_frame_size = x264_encoder_encode(call->video.second->h264_encoder,
-                                               &nal,
-                                               &i_nal,
-                                               &(call->video.second->h264_in_pic),
-                                               &(call->video.second->h264_out_pic));
-
-            if (i_frame_size < 0) {
-                // some error
-            } else if (i_frame_size == 0) {
-                // zero size output
-            } else {
-                // nal->p_payload --> outbuf
-                // i_frame_size --> out size in bytes
-
-                // LOGGER_ERROR(av->m->log, "H264: i_frame_size=%d nal_buf=%p KF=%d\n",
-                //             (int)i_frame_size,
-                //             nal->p_payload,
-                //             (int)call->video.second->h264_out_pic.b_keyframe
-                //            );
-
-            }
-
-            if (nal == NULL)
-            {
-                pthread_mutex_unlock(call->mutex_video);
-                goto END;
-            }
-
-            if (nal->p_payload == NULL)
-            {
-                pthread_mutex_unlock(call->mutex_video);
-                goto END;
-            }
+            rc = vc_encode_frame_h264(call->video.second, call->video.first, width, height, y, u, v, error);
         }
+    }
+
+    if (rc != 0) {
+        pthread_mutex_unlock(call->mutex_video);
+        goto END;
     }
 
     ++call->video.second->frame_counter;
 
     LOGGER_DEBUG(av->m->log, "VPXENC:======================\n");
     LOGGER_DEBUG(av->m->log, "VPXENC:frame num=%ld\n", (long)call->video.second->frame_counter);
-
-
-    { /* Send frames */
-
-        if ((call->video.second->video_encoder_coded_used == TOXAV_ENCODER_CODEC_USED_VP8)
-                || (call->video.second->video_encoder_coded_used == TOXAV_ENCODER_CODEC_USED_VP9)) {
-
-
-            vpx_codec_iter_t iter = NULL;
-            const vpx_codec_cx_pkt_t *pkt;
-
-            while ((pkt = vpx_codec_get_cx_data(call->video.second->encoder, &iter)) != NULL) {
-                if (pkt->kind == VPX_CODEC_CX_FRAME_PKT) {
-                    const int keyframe = (pkt->data.frame.flags & VPX_FRAME_IS_KEY) != 0;
-
-                    if (keyframe) {
-                        call->video.second->last_sent_keyframe_ts = current_time_monotonic();
-                    }
-
-                    if ((pkt->data.frame.flags & VPX_FRAME_IS_FRAGMENT) != 0) {
-                        LOGGER_DEBUG(av->m->log, "VPXENC:VPX_FRAME_IS_FRAGMENT:*yes* size=%lld pid=%d\n",
-                                     (long long)pkt->data.frame.sz, (int)pkt->data.frame.partition_id);
-                    } else {
-                        LOGGER_DEBUG(av->m->log, "VPXENC:VPX_FRAME_IS_FRAGMENT:-no- size=%lld pid=%d\n",
-                                     (long long)pkt->data.frame.sz, (int)pkt->data.frame.partition_id);
-                    }
-
-                    // use the record timestamp that was actually used for this frame
-                    video_frame_record_timestamp = (uint64_t)pkt->data.frame.pts;
-                    // LOGGER_DEBUG(av->m->log, "video packet record time: %llu", video_frame_record_timestamp);
-
-                    // https://www.webmproject.org/docs/webm-sdk/structvpx__codec__cx__pkt.html
-                    // pkt->data.frame.sz -> size_t
-                    const uint32_t frame_length_in_bytes = pkt->data.frame.sz;
-
-
-                    int res = rtp_send_data
-                              (
-                                  call->video.first,
-                                  (const uint8_t *)pkt->data.frame.buf,
-                                  frame_length_in_bytes,
-                                  keyframe,
-                                  video_frame_record_timestamp,
-                                  (int32_t)pkt->data.frame.partition_id,
-                                  TOXAV_ENCODER_CODEC_USED_VP8,
-                                  av->m->log
-                              );
-
-                    LOGGER_DEBUG(av->m->log, "+ _sending_FRAME_TYPE_==%s bytes=%d frame_len=%d", keyframe ? "K" : ".",
-                                 (int)pkt->data.frame.sz, (int)frame_length_in_bytes);
-                    LOGGER_DEBUG(av->m->log, "+ _sending_FRAME_ b0=%d b1=%d", ((const uint8_t *)pkt->data.frame.buf)[0] ,
-                                 ((const uint8_t *)pkt->data.frame.buf)[1]);
-
-                    video_frame_record_timestamp++;
-
-                    if (res < 0) {
-                        pthread_mutex_unlock(call->mutex_video);
-                        LOGGER_WARNING(av->m->log, "Could not send video frame: %s", strerror(errno));
-                        rc = TOXAV_ERR_SEND_FRAME_RTP_FAILED;
-                        goto END;
-                    } else {
-                    }
-                }
-            }
-
-        } else {
-            // HINT: H264
-
-            if (i_frame_size > 0) {
-
-                // use the record timestamp that was actually used for this frame
-                video_frame_record_timestamp = (uint64_t)call->video.second->h264_in_pic.i_pts;
-                const uint32_t frame_length_in_bytes = i_frame_size;
-                const int keyframe = (int)call->video.second->h264_out_pic.b_keyframe;
-
-                int res = rtp_send_data
-                          (
-                              call->video.first,
-                              (const uint8_t *)nal->p_payload,
-                              frame_length_in_bytes,
-                              keyframe,
-                              video_frame_record_timestamp,
-                              (int32_t)0,
-                              TOXAV_ENCODER_CODEC_USED_H264,
-                              av->m->log
-                          );
-
-                video_frame_record_timestamp++;
-
-                if (res < 0) {
-                    pthread_mutex_unlock(call->mutex_video);
-                    LOGGER_WARNING(av->m->log, "Could not send video frame: %s", strerror(errno));
-                    rc = TOXAV_ERR_SEND_FRAME_RTP_FAILED;
-                    goto END;
-                } else {
-
-
-                }
-
-            }
-        }
-
-    }
 
     pthread_mutex_unlock(call->mutex_video);
 
