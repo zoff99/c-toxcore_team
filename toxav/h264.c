@@ -199,6 +199,11 @@ bool vc_encode_frame_h264(VCSession *vc, struct RTPSession *rtp, uint16_t width,
 
         video_frame_record_timestamp++;
 
+        if (res < 0) {
+            LOGGER_WARNING(vc->log, "Could not send video frame: %s", strerror(errno));
+            return TOXAV_ERR_SEND_FRAME_RTP_FAILED;
+        }
+
     }
 
     return res;

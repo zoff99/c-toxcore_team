@@ -132,8 +132,7 @@ VPX_DL_BEST_QUALITY   (0)       deadline parameter analogous to VPx BEST QUALITY
 struct RTPMessage;
 struct RingBuffer;
 
-typedef struct _ILCLIENT_T ILCLIENT_T;
-typedef struct _COMPONENT_T COMPONENT_T;
+struct OMXContext;
 
 typedef struct VCSession_s {
     /* encoding */
@@ -147,9 +146,7 @@ typedef struct VCSession_s {
     uint32_t h264_enc_bitrate;
 
 #ifdef RASPBERRY_PI
-    ILCLIENT_T *omx_client;
-    COMPONENT_T *omx_encoder;
-    COMPONENT_T *omx_list[5];
+    struct OMXContext *omx_ctx;
 #endif
 
     /* decoding */
