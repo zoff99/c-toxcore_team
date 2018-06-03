@@ -288,7 +288,8 @@ int vc_decode_frame_h264(VCSession *vc, struct RTPHeader* header_v3, uint8_t *da
     // HINT: dirty hack to add FF_INPUT_BUFFER_PADDING_SIZE bytes!!
     free(tmp_buf);
     // HINT: dirty hack to add FF_INPUT_BUFFER_PADDING_SIZE bytes!!
-    
+
+    return 0;   
 }
 
 int vc_reconfigure_encoder_h264(Logger *log, VCSession *vc, uint32_t bit_rate, uint16_t width, uint16_t height,

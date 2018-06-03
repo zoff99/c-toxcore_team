@@ -33,41 +33,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdlib.h>
 #include <string.h>
 
+#include "video.h"
+
 #include "bcm_host.h"
 #include "ilclient.h"
 
-#define NUMFRAMES 300
-#define WIDTH     640
-#define PITCH     ((WIDTH+31)&~31)
-#define HEIGHT    ((WIDTH)*9/16)
-#define HEIGHT16  ((HEIGHT+15)&~15)
-#define SIZE      ((WIDTH * HEIGHT16 * 3)/2)
-
-// generate an animated test card in YUV format
-static int
-generate_test_card(void *buf, OMX_U32 * filledLen, int frame)
-{
-   int i, j;
-   char *y = buf, *u = y + PITCH * HEIGHT16, *v =
-      u + (PITCH >> 1) * (HEIGHT16 >> 1);
-
-   for (j = 0; j < HEIGHT / 2; j++) {
-      char *py = y + 2 * j * PITCH;
-      char *pu = u + j * (PITCH >> 1);
-      char *pv = v + j * (PITCH >> 1);
-      for (i = 0; i < WIDTH / 2; i++) {
-	 int z = (((i + frame) >> 4) ^ ((j + frame) >> 4)) & 15;
-	 py[0] = py[1] = py[PITCH] = py[PITCH + 1] = 0x80 + z * 0x8;
-	 pu[0] = 0x00 + z * 0x10;
-	 pv[0] = 0x80 + z * 0x30;
-	 py += 2;
-	 pu++;
-	 pv++;
-      }
-   }
-   *filledLen = SIZE;
-   return 1;
-}
 
 static void
 print_def(OMX_PARAM_PORTDEFINITIONTYPE def)
@@ -89,14 +59,13 @@ print_def(OMX_PARAM_PORTDEFINITIONTYPE def)
 	  def.format.video.xFramerate, def.format.video.eColorFormat);
 }
 
-static int
-video_encode_test(char *outputfilename)
+VCSession *vc_new_h264_omx(Logger *log, ToxAV *av, uint32_t friend_number, toxav_video_receive_frame_cb *cb, void *cb_data,
+                      VCSession *vc)
 {
    OMX_VIDEO_PARAM_PORTFORMATTYPE format;
    OMX_PARAM_PORTDEFINITIONTYPE def;
    COMPONENT_T *video_encode = NULL;
    COMPONENT_T *list[5];
-   OMX_BUFFERHEADERTYPE *buf;
    OMX_BUFFERHEADERTYPE *out;
    OMX_ERRORTYPE r;
    ILCLIENT_T *client;
@@ -106,17 +75,20 @@ video_encode_test(char *outputfilename)
 
    memset(list, 0, sizeof(list));
 
-   if ((client = ilclient_init()) == NULL) {
-      return -3;
-   }
+    // This function crashed when not called on the main thread
+    bcm_host_init(); // TODO: make sure this only gets called once
 
-   if (OMX_Init() != OMX_ErrorNone) {
-      ilclient_destroy(client);
-      return -4;
+   if (OMX_Init() != 0) {
+      LOGGER_ERROR(log, "OMX_Init()");
+
+   if ((vc->omx_client = ilclient_init()) == NULL) {
+     // TODO: Error handling
+     LOGGER_ERROR(log, "ilclient_init()");
+      return 0;
    }
 
    // create video_encode
-   r = ilclient_create_component(client, &video_encode, "video_encode",
+   r = ilclient_create_component(client, &vc->omx_encoder, "video_encode",
 				 ILCLIENT_DISABLE_ALL_PORTS |
 				 ILCLIENT_ENABLE_INPUT_BUFFERS |
 				 ILCLIENT_ENABLE_OUTPUT_BUFFERS);
@@ -126,7 +98,7 @@ video_encode_test(char *outputfilename)
 	  r);
       exit(1);
    }
-   list[0] = video_encode;
+   list[0] = vc->omx_encoder;
 
    // get current settings of video_encode component from port 200
    memset(&def, 0, sizeof(OMX_PARAM_PORTDEFINITIONTYPE));
@@ -135,7 +107,7 @@ video_encode_test(char *outputfilename)
    def.nPortIndex = 200;
 
    if (OMX_GetParameter
-       (ILC_GET_HANDLE(video_encode), OMX_IndexParamPortDefinition,
+       (ILC_GET_HANDLE(vc->omx_encoder), OMX_IndexParamPortDefinition,
 	&def) != OMX_ErrorNone) {
       printf("%s:%d: OMX_GetParameter() for video_encode port 200 failed!\n",
 	     __FUNCTION__, __LINE__);
@@ -145,8 +117,8 @@ video_encode_test(char *outputfilename)
    print_def(def);
 
    // Port 200: in 1/1 115200 16 enabled,not pop.,not cont. 320x240 320x240 @1966080 20
-   def.format.video.nFrameWidth = WIDTH;
-   def.format.video.nFrameHeight = HEIGHT;
+   def.format.video.nFrameWidth = 1920;
+   def.format.video.nFrameHeight = 1080;
    def.format.video.xFramerate = 30 << 16;
    def.format.video.nSliceHeight = def.format.video.nFrameHeight;
    def.format.video.nStride = def.format.video.nFrameWidth;
@@ -236,85 +208,86 @@ video_encode_test(char *outputfilename)
    printf("encode to executing...\n");
    ilclient_change_component_state(video_encode, OMX_StateExecuting);
 
-   outf = fopen(outputfilename, "w");
-   if (outf == NULL) {
-      printf("Failed to open '%s' for writing video\n", outputfilename);
-      exit(1);
-   }
+  return vc;
+}
 
-   printf("looping for buffers...\n");
-   do {
-      buf = ilclient_get_input_buffer(video_encode, 200, 1);
-      if (buf == NULL) {
-	 printf("Doh, no buffers for me!\n");
-      }
-      else {
-	 /* fill it */
-	 generate_test_card(buf->pBuffer, &buf->nFilledLen, framenumber++);
-
-	 if (OMX_EmptyThisBuffer(ILC_GET_HANDLE(video_encode), buf) !=
-	     OMX_ErrorNone) {
-	    printf("Error emptying buffer!\n");
-	 }
-
-	 out = ilclient_get_output_buffer(video_encode, 201, 1);
-
-	 r = OMX_FillThisBuffer(ILC_GET_HANDLE(video_encode), out);
-	 if (r != OMX_ErrorNone) {
-	    printf("Error filling buffer: %x\n", r);
-	 }
-
-	 if (out != NULL) {
-	    if (out->nFlags & OMX_BUFFERFLAG_CODECCONFIG) {
-	       int i;
-	       for (i = 0; i < out->nFilledLen; i++)
-		  printf("%x ", out->pBuffer[i]);
-	       printf("\n");
-	    }
-
-	    r = fwrite(out->pBuffer, 1, out->nFilledLen, outf);
-	    if (r != out->nFilledLen) {
-	       printf("fwrite: Error emptying buffer: %d!\n", r);
-	    }
-	    else {
-	       printf("Writing frame %d/%d\n", framenumber, NUMFRAMES);
-	    }
-	    out->nFilledLen = 0;
-	 }
-	 else {
-	    printf("Not getting it :(\n");
-	 }
-
-      }
-   }
-   while (framenumber < NUMFRAMES);
-
-   fclose(outf);
-
+void vc_kill_h264_omx(VCSession* vc)
+{
    printf("Teardown.\n");
 
    printf("disabling port buffers for 200 and 201...\n");
-   ilclient_disable_port_buffers(video_encode, 200, NULL, NULL, NULL);
-   ilclient_disable_port_buffers(video_encode, 201, NULL, NULL, NULL);
+   ilclient_disable_port_buffers(vc->omx_encoder, 200, NULL, NULL, NULL);
+   ilclient_disable_port_buffers(vc->omx_encoder, 201, NULL, NULL, NULL);
 
-   ilclient_state_transition(list, OMX_StateIdle);
-   ilclient_state_transition(list, OMX_StateLoaded);
+   ilclient_state_transition(vc->omx_list, OMX_StateIdle);
+   ilclient_state_transition(vc->omx_list, OMX_StateLoaded);
 
-   ilclient_cleanup_components(list);
+   ilclient_cleanup_components(vc->omx_list);
 
    OMX_Deinit();
 
-   ilclient_destroy(client);
-   return status;
+   ilclient_destroy(vc->omx_client);
 }
 
-int
-main(int argc, char **argv)
+bool vc_encode_frame_h264_omx(VCSession *vc, struct RTPSession *rtp, uint16_t width, uint16_t height, const uint8_t *y,
+                            const uint8_t *u, const uint8_t *v, TOXAV_ERR_SEND_FRAME *error)
 {
-   if (argc < 2) {
-      printf("Usage: %s <filename>\n", argv[0]);
-      exit(1);
-   }
-   bcm_host_init();
-   return video_encode_test(argv[1]);
+  uint64_t video_frame_record_timestamp = current_time_monotonic();
+
+  OMX_BUFFERHEADERTYPE *buf;
+  OMX_BUFFERHEADERTYPE *out;
+  buf = ilclient_get_input_buffer(vc->omx_encoder, 200, 1);
+  if (buf == NULL) {
+    printf("Doh, no buffers for me!\n");
+    return false;
+  }
+
+  memcpy(buf->pBuffer, width * height, y);
+  if (OMX_EmptyThisBuffer(ILC_GET_HANDLE(vc->omx_encoder), buf) !=
+    OMX_ErrorNone) {
+    printf("Error emptying buffer!\n");
+    return false;
+  }
+
+  out = ilclient_get_output_buffer(vc->omx_encoder, 201, 1);
+
+  int r = OMX_FillThisBuffer(ILC_GET_HANDLE(vc->omx_encoder), out);
+  if (r != OMX_ErrorNone) {
+    printf("Error filling buffer: %x\n", r);
+  }
+
+  if (out != NULL) {
+    if (out->nFlags & OMX_BUFFERFLAG_CODECCONFIG) {
+      int i;
+      for (i = 0; i < out->nFilledLen; i++)
+        printf("%x ", out->pBuffer[i]);
+      printf("\n");
+    }
+
+    bool keyframe = true;
+
+    return  rtp_send_data
+                  (
+                      rtp,
+                      out->pBuffer,
+                      out->nFilledLen,
+                      keyframe,
+                      video_frame_record_timestamp,
+                      (int32_t)0,
+                      TOXAV_ENCODER_CODEC_USED_H264,
+                      vc->log
+                  );
+  }
+  else {
+    printf("Not getting it :(\n");
+    return -23;
+  }
+}
+
+
+int vc_reconfigure_encoder_h264_omx(Logger *log, VCSession *vc, uint32_t bit_rate, uint16_t width, uint16_t height,
+                               int16_t kf_max_dist)
+{
+  printf("OMX Reconfigure not implemented :(\n");
+  return -1;
 }

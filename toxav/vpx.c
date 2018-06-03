@@ -528,6 +528,8 @@ bool vc_encode_frame_vpx(VCSession* vc, struct RTPSession* rtp, uint16_t width, 
             }
         }
     }
+
+    return 0;
 }
 
 int vc_decode_frame_vpx(VCSession *vc, struct RTPHeader* header_v3, uint8_t *data, uint32_t data_len)

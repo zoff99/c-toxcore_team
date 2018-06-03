@@ -1213,7 +1213,11 @@ bool toxav_video_send_frame(ToxAV *av, uint32_t friend_number, uint16_t width, u
 
             rc = vc_encode_frame_vpx(call->video.second, call->video.first, width, height, y, u, v, error);
         } else {
+#ifndef RASPBERRY_PI
             rc = vc_encode_frame_h264(call->video.second, call->video.first, width, height, y, u, v, error);
+#else
+            rc = vc_encode_frame_h264_omx(call->video.second, call->video.first, width, height, y, u, v, error);
+#endif
         }
     }
 

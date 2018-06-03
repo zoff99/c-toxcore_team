@@ -71,7 +71,6 @@ void vc__init_encoder_cfg(Logger *log, vpx_codec_enc_cfg_t *cfg, int16_t kf_max_
                           int32_t rc_max_quantizer, int32_t rc_min_quantizer, int32_t encoder_codec,
                           int32_t video_keyframe_method)
 {
-
     vpx_codec_err_t rc;
 
     if (encoder_codec != TOXAV_ENCODER_CODEC_USED_VP9) {
