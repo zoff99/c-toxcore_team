@@ -375,7 +375,7 @@ void vc_kill_vpx(VCSession *vc)
 
 
 
-bool vc_encode_frame_vpx(VCSession* vc, struct RTPSession* rtp, uint16_t width, uint16_t height, const uint8_t *y,
+int vc_encode_frame_vpx(VCSession* vc, struct RTPSession* rtp, uint16_t width, uint16_t height, const uint8_t *y,
                             const uint8_t *u, const uint8_t *v, TOXAV_ERR_SEND_FRAME *error)
 {
     uint64_t video_frame_record_timestamp = current_time_monotonic();

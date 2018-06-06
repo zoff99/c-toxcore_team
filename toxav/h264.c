@@ -125,7 +125,7 @@ void vc_kill_h264(VCSession *vc)
     avcodec_free_context(&vc->h264_decoder);
 }
 
-bool vc_encode_frame_h264(VCSession *vc, struct RTPSession *rtp, uint16_t width, uint16_t height, const uint8_t *y,
+int vc_encode_frame_h264(VCSession *vc, struct RTPSession *rtp, uint16_t width, uint16_t height, const uint8_t *y,
                             const uint8_t *u, const uint8_t *v, TOXAV_ERR_SEND_FRAME *error)
 {
     uint64_t video_frame_record_timestamp = current_time_monotonic();
@@ -218,6 +218,7 @@ bool vc_encode_frame_h264(VCSession *vc, struct RTPSession *rtp, uint16_t width,
     return res;
 
 }
+
 int vc_decode_frame_h264(VCSession *vc, struct RTPHeader* header_v3, uint8_t *data, uint32_t data_len)
 {
     // LOGGER_ERROR(vc->log, "DEC:H264------------");

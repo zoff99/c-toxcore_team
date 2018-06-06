@@ -120,6 +120,7 @@ static void get_i420_frame_info(int width, int height, int buf_stride, int buf_s
 
 // Ugly, stupid utility functions
 static void say(const char* message, ...) {
+#if 0
     va_list args;
     char str[1024];
     memset(str, 0, sizeof(str));
@@ -131,6 +132,7 @@ static void say(const char* message, ...) {
         str[str_len] = '\n';
     }
     fprintf(stderr, str);
+#endif
 }
 
 static void die(const char* message, ...) {
@@ -762,7 +764,7 @@ void vc_kill_h264_omx(VCSession* vc)
 static int frame_in = 0;
 static int frame_out = 0;
 
-bool vc_encode_frame_h264_omx(VCSession *vc, struct RTPSession *rtp, uint16_t width, uint16_t height, const uint8_t *y,
+int vc_encode_frame_h264_omx(VCSession *vc, struct RTPSession *rtp, uint16_t width, uint16_t height, const uint8_t *y,
                             const uint8_t *u, const uint8_t *v, TOXAV_ERR_SEND_FRAME *error)
 {
     OMX_ERRORTYPE r = 0;
@@ -872,6 +874,8 @@ bool vc_encode_frame_h264_omx(VCSession *vc, struct RTPSession *rtp, uint16_t wi
             return TOXAV_ERR_SEND_FRAME_RTP_FAILED;
         }
     }
+    
+    return TOXAV_ERR_SEND_FRAME_OK
 }
 
 
