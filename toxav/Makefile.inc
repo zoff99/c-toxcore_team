@@ -21,7 +21,14 @@ libtoxav_la_SOURCES = ../toxav/rtp.h \
                     ../toxav/toxav.h \
                     ../toxav/toxav.c \
                     ../toxav/h264.c \
+                    ../toxav/toxav_old.c \
                     ../toxav/vpx.c
+
+if ON_RASPI
+
+libtoxav_la_SOURCES += ../toxav/h264_omx.c
+
+endif
 
 libtoxav_la_CFLAGS = -I../toxcore \
                     -I../toxav \
