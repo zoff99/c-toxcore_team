@@ -32,6 +32,7 @@
  */
 
 #include "video.h" 
+#include "rtp.h" 
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -512,8 +513,6 @@ static OMX_ERRORTYPE fill_output_buffer_done_handler(
         OMX_BUFFERHEADERTYPE* pBuffer) {
 
     struct OMXContext *ctx = ((struct OMXContext*)pAppData);
-    say("!?!output buffer filled cc=%04p size=%d\n", pBuffer->nFlags, pBuffer->nFilledLen);
-    say("!!! fill_output_buffer_done_handler ctx=%p", ctx);
     vcos_semaphore_wait(&ctx->handler_lock);
     // The main loop can now flush the buffer to output file
     ctx->encoder_output_buffer_available = 1;
@@ -809,45 +808,33 @@ bool vc_encode_frame_h264_omx(VCSession *vc, struct RTPSession *rtp, uint16_t wi
 
     bool wait_for_eof = true;
 
-    while (wait_for_eof = true)
+    while (wait_for_eof)
     {
-        say("? sending buffer fill request");
         // Request a new buffer form the encoder
         if((r = OMX_FillThisBuffer(ctx->encoder, ctx->encoder_ppBuffer_out)) != OMX_ErrorNone) {
             omx_die(r, "Failed to request filling of the output buffer on encoder output port 201");
         }
-
-        say("? waiting for omx output");
-        say("!!2 vc_encode_frame_h264_omx ctx=%p", ctx);
+        
         bool wait_for_buffer = true;
         while (wait_for_buffer) {
-            usleep(1);
             vcos_semaphore_wait(&ctx->handler_lock);
-            int wait_for_buffer = !ctx->encoder_output_buffer_available;
+            wait_for_buffer = !ctx->encoder_output_buffer_available;
             vcos_semaphore_post(&ctx->handler_lock);
 
             if (wait_for_buffer) {
-                say("!!3 waiting for buffer ctx=%p", ctx);
-                usleep(300000);
+                usleep(10);
             } else {
-                say("! buffer received");
                 ctx->encoder_output_buffer_available = 0;
             }
         }
-
-        say("! got omx buffer!");
-
-        // fill_output_buffer_done_handler() has marked that there's
-        // a buffer for us to flush
 
         if(ctx->encoder_ppBuffer_out->nFlags & OMX_BUFFERFLAG_ENDOFFRAME) {
             wait_for_eof = false;
         }
 
-        // Flush buffer to output file
-        // use the record timestamp that was actually used for this frame
+        // TODO: use the record timestamp that was actually used for this frame
         uint64_t video_frame_record_timestamp = current_time_monotonic();
-        //const int keyframe = (int)vc->h264_out_pic.b_keyframe;
+
         const int keyframe = ctx->encoder_ppBuffer_out->nFlags & OMX_BUFFERFLAG_SYNCFRAME;
         const int spspps = ctx->encoder_ppBuffer_out->nFlags & OMX_BUFFERFLAG_CODECCONFIG;
         const int eof  = ctx->encoder_ppBuffer_out->nFlags & OMX_BUFFERFLAG_ENDOFFRAME;
