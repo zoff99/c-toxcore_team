@@ -739,6 +739,8 @@ int vc_decode_frame_vpx(VCSession *vc, struct RTPHeader* header_v3, uint8_t *dat
 #endif
 
     }
+    
+    return 0;
 }
 
 void video_switch_decoder_vpx(VCSession *vc, TOXAV_ENCODER_CODEC_USED_VALUE decoder_to_use)

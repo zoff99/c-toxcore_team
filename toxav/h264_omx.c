@@ -875,7 +875,7 @@ int vc_encode_frame_h264_omx(VCSession *vc, struct RTPSession *rtp, uint16_t wid
         }
     }
     
-    return TOXAV_ERR_SEND_FRAME_OK
+    return TOXAV_ERR_SEND_FRAME_OK;
 }
 
 

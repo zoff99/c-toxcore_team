@@ -271,10 +271,10 @@ void vc_kill(VCSession *vc)
 
 void video_switch_decoder(VCSession *vc, TOXAV_ENCODER_CODEC_USED_VALUE decoder_to_use)
 {
-    if (vc->video_decoder_codec_used != decoder_to_use) {
-        if ((decoder_to_use == TOXAV_ENCODER_CODEC_USED_VP8)
-                || (decoder_to_use == TOXAV_ENCODER_CODEC_USED_VP9)
-                || (decoder_to_use == TOXAV_ENCODER_CODEC_USED_H264)) {
+    if ((int64_t)vc->video_decoder_codec_used != (int64_t)decoder_to_use) {
+        if (((int64_t)decoder_to_use == (int64_t)TOXAV_ENCODER_CODEC_USED_VP8)
+                || ((int64_t)decoder_to_use == (int64_t)TOXAV_ENCODER_CODEC_USED_VP9)
+                || ((int64_t)decoder_to_use == (int64_t)TOXAV_ENCODER_CODEC_USED_H264)) {
 
             // ** DISABLED ** // video_switch_decoder_vpx(vc, decoder_to_use);
             vc->video_decoder_codec_used = decoder_to_use;

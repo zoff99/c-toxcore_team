@@ -124,7 +124,7 @@ void bwc_feed_avg(BWController *bwc, uint32_t bytes)
     return;
 
     uint32_t *packet_length;
-    uint8_t dummy;
+    uint64_t dummy;
 
     rb_read(bwc->rcvpkt.rb, (void **) &packet_length, &dummy);
     *packet_length = bytes;
