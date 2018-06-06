@@ -39,6 +39,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <assert.h>
 
 #include <bcm_host.h>
 
@@ -51,9 +52,9 @@
 #include <IL/OMX_Broadcom.h>
 
 // Hard coded parameters
-#define VIDEO_WIDTH                     1920 / 4
-#define VIDEO_HEIGHT                    1080 / 4
-#define VIDEO_FRAMERATE                 25
+#define VIDEO_WIDTH                     640
+#define VIDEO_HEIGHT                    480
+#define VIDEO_FRAMERATE                 30
 #define VIDEO_BITRATE                   10000000
 
 // Dunno where this is originally stolen from...
@@ -457,11 +458,6 @@ static void init_component_handle(
     }
 }
 
-// Global signal handler for trapping SIGINT, SIGTERM, and SIGQUIT
-static void signal_handler(int signal) {
-    want_quit = 1;
-}
-
 // OMX calls this handler for all the events it emits
 static OMX_ERRORTYPE event_handler(
         OMX_HANDLETYPE hComponent,
@@ -501,6 +497,7 @@ static OMX_ERRORTYPE empty_input_buffer_done_handler(
         OMX_BUFFERHEADERTYPE* pBuffer) {
     struct OMXContext *ctx = ((struct OMXContext*)pAppData);
     vcos_semaphore_wait(&ctx->handler_lock);
+    say("?!? empty_input_buffer_done\n");
     // The main loop can now fill the buffer from input file
     ctx->encoder_input_buffer_needed = 1;
     vcos_semaphore_post(&ctx->handler_lock);
@@ -513,7 +510,10 @@ static OMX_ERRORTYPE fill_output_buffer_done_handler(
         OMX_HANDLETYPE hComponent,
         OMX_PTR pAppData,
         OMX_BUFFERHEADERTYPE* pBuffer) {
+
     struct OMXContext *ctx = ((struct OMXContext*)pAppData);
+    say("!?!output buffer filled cc=%04p size=%d\n", pBuffer->nFlags, pBuffer->nFilledLen);
+    say("!!! fill_output_buffer_done_handler ctx=%p", ctx);
     vcos_semaphore_wait(&ctx->handler_lock);
     // The main loop can now flush the buffer to output file
     ctx->encoder_output_buffer_available = 1;
@@ -690,16 +690,9 @@ VCSession *vc_new_h264_omx(Logger *log, ToxAV *av, uint32_t friend_number, toxav
       die("Allocated encoder input port 200 buffer size %d doesn't equal to the expected buffer size %d", vc->omx_ctx->encoder_ppBuffer_in->nAllocLen, buf_info.size);
   }
 
-  say("Enter encode loop, press Ctrl-C to quit...");
-
-  size_t input_total_read, want_read, input_read, output_written;
-  // I420 spec: U and V plane span size half of the size of the Y plane span size
-
   vc->omx_ctx->encoder_input_buffer_needed = 1;
 
-  signal(SIGINT,  signal_handler);
-  signal(SIGTERM, signal_handler);
-  signal(SIGQUIT, signal_handler);
+  say("vc_new_h264_omx finished!");
 
   return vc;
 }
@@ -712,12 +705,7 @@ void vc_kill_h264_omx(VCSession* vc)
 
   OMX_ERRORTYPE r;
 
- say("Cleaning up...");
-
-    // Restore signal handlers
-    signal(SIGINT,  SIG_DFL);
-    signal(SIGTERM, SIG_DFL);
-    signal(SIGQUIT, SIG_DFL);
+  say("Cleaning up...");
 
     // Flush the buffers on each component
     if((r = OMX_SendCommand(ctx.encoder, OMX_CommandFlush, 200, NULL)) != OMX_ErrorNone) {
@@ -778,89 +766,131 @@ static int frame_out = 0;
 bool vc_encode_frame_h264_omx(VCSession *vc, struct RTPSession *rtp, uint16_t width, uint16_t height, const uint8_t *y,
                             const uint8_t *u, const uint8_t *v, TOXAV_ERR_SEND_FRAME *error)
 {
-  struct OMXContext ctx;
-  memcpy(&ctx, vc->omx_ctx, sizeof(struct OMXContext));
+    OMX_ERRORTYPE r = 0;
+    struct OMXContext* ctx = vc->omx_ctx;
 
-  OMX_ERRORTYPE r;
+    say("!!! vc_encode_frame_h264_omx ctx=%p", ctx);
 
-  // empty_input_buffer_done_handler() has marked that there's
-  // a need for a buffer to be filled by us
-  if(ctx.encoder_input_buffer_needed) {
-      int input_total_read = 0;
-      memset(ctx.encoder_ppBuffer_in->pBuffer, 0, ctx.encoder_ppBuffer_in->nAllocLen);
-      // Pack Y, U, and V plane spans read from input file to the buffer
+    // input buffer should be available with our synchronous scheme
+    assert(ctx->encoder_input_buffer_needed);
+    // output buffer should be empty
+    assert(!ctx->encoder_output_buffer_available);
 
-      const void* yuv[3] = {y, u, v};
-      int i;
-      for(i = 0; i < 3; i++) {
+    // Dump new YUV frame into OMX
+    {
+        say("!!! sending new frame to omx\n");
+        //memset(ctx.encoder_ppBuffer_in->pBuffer, 0, ctx.encoder_ppBuffer_in->nAllocLen);
 
-          int plane_span_y = ROUND_UP_2(height), plane_span_uv = plane_span_y / 2;
-          int want_read = frame_info.p_stride[i] * (i == 0 ? plane_span_y : plane_span_uv);
+        size_t input_total_read = 0;
 
-          memcpy(
-              ctx.encoder_ppBuffer_in->pBuffer + buf_info.p_offset[i],
-              yuv[i],
-              want_read);
-          
-      }
-      ctx.encoder_ppBuffer_in->nOffset = 0;
-      ctx.encoder_ppBuffer_in->nFilledLen = (buf_info.size - frame_info.size) + input_total_read;
-      frame_in++;
-      say("Read from input file and wrote to input buffer %d/%d, frame %d", ctx.encoder_ppBuffer_in->nFilledLen, ctx.encoder_ppBuffer_in->nAllocLen, frame_in);
-      {
-          ctx.encoder_input_buffer_needed = 0;
-          if((r = OMX_EmptyThisBuffer(ctx.encoder, ctx.encoder_ppBuffer_in)) != OMX_ErrorNone) {
-              omx_die(r, "Failed to request emptying of the input buffer on encoder input port 200");
-          }
-      }
-  }
-  // fill_output_buffer_done_handler() has marked that there's
-  // a buffer for us to flush
-  if(ctx.encoder_output_buffer_available) {
-      if(ctx.encoder_ppBuffer_out->nFlags & OMX_BUFFERFLAG_ENDOFFRAME) {
-          frame_out++;
-      }
-      // Flush buffer to output file
-            // use the record timestamp that was actually used for this frame
+        // Pack Y, U, and V plane spans read from input file to the buffer
+        const void* yuv[3] = {y, u, v};
+        int i;
+        for(i = 0; i < 3; i++) {
+
+            int plane_span_y = ROUND_UP_2(height), plane_span_uv = plane_span_y / 2;
+            int want_read = frame_info.p_stride[i] * (i == 0 ? plane_span_y : plane_span_uv);
+
+            memcpy(
+                ctx->encoder_ppBuffer_in->pBuffer + buf_info.p_offset[i],
+                yuv[i],
+                want_read);
+            
+            input_total_read += want_read;
+        }
+        ctx->encoder_ppBuffer_in->nOffset = 0;
+        ctx->encoder_ppBuffer_in->nFilledLen = (buf_info.size - frame_info.size) + input_total_read;
+
+        ctx->encoder_input_buffer_needed = 0;
+        if((r = OMX_EmptyThisBuffer(ctx->encoder, ctx->encoder_ppBuffer_in)) != OMX_ErrorNone) {
+            omx_die(r, "Failed to request emptying of the input buffer on encoder input port 200");
+        }
+    }
+
+    bool wait_for_eof = true;
+
+    while (wait_for_eof = true)
+    {
+        say("? sending buffer fill request");
+        // Request a new buffer form the encoder
+        if((r = OMX_FillThisBuffer(ctx->encoder, ctx->encoder_ppBuffer_out)) != OMX_ErrorNone) {
+            omx_die(r, "Failed to request filling of the output buffer on encoder output port 201");
+        }
+
+        say("? waiting for omx output");
+        say("!!2 vc_encode_frame_h264_omx ctx=%p", ctx);
+        bool wait_for_buffer = true;
+        while (wait_for_buffer) {
+            usleep(1);
+            vcos_semaphore_wait(&ctx->handler_lock);
+            int wait_for_buffer = !ctx->encoder_output_buffer_available;
+            vcos_semaphore_post(&ctx->handler_lock);
+
+            if (wait_for_buffer) {
+                say("!!3 waiting for buffer ctx=%p", ctx);
+                usleep(300000);
+            } else {
+                say("! buffer received");
+                ctx->encoder_output_buffer_available = 0;
+            }
+        }
+
+        say("! got omx buffer!");
+
+        // fill_output_buffer_done_handler() has marked that there's
+        // a buffer for us to flush
+
+        if(ctx->encoder_ppBuffer_out->nFlags & OMX_BUFFERFLAG_ENDOFFRAME) {
+            wait_for_eof = false;
+        }
+
+        // Flush buffer to output file
+        // use the record timestamp that was actually used for this frame
         uint64_t video_frame_record_timestamp = current_time_monotonic();
-        const int keyframe = (int)vc->h264_out_pic.b_keyframe;
+        //const int keyframe = (int)vc->h264_out_pic.b_keyframe;
+        const int keyframe = ctx->encoder_ppBuffer_out->nFlags & OMX_BUFFERFLAG_SYNCFRAME;
+        const int spspps = ctx->encoder_ppBuffer_out->nFlags & OMX_BUFFERFLAG_CODECCONFIG;
+        const int eof  = ctx->encoder_ppBuffer_out->nFlags & OMX_BUFFERFLAG_ENDOFFRAME;
+        size_t frame_bytes = ctx->encoder_ppBuffer_out->nFilledLen;
+
+        say("!   omx h264 packet: keyframe=%d sps/pps=%d eof=%d size=%d\n", keyframe, spspps, eof, frame_bytes);
+
+        // prepend a faked Annex-B header
+        uint8_t* buf = malloc(frame_bytes + 4);
+        memcpy(buf + 4, ctx->encoder_ppBuffer_out->pBuffer + ctx->encoder_ppBuffer_out->nOffset, frame_bytes);
+
+        buf[0] = 0;
+        buf[1] = 0;
+        buf[2] = 0;
+        buf[3] = 1;
 
         int res = rtp_send_data
                     (
                         rtp,
-                        (const uint8_t *)ctx.encoder_ppBuffer_out->pBuffer + ctx.encoder_ppBuffer_out->nOffset,
-                        ctx.encoder_ppBuffer_out->nFilledLen,
+                        //(const uint8_t *)ctx.encoder_ppBuffer_out->pBuffer + ctx.encoder_ppBuffer_out->nOffset,
+                        buf,
+                        frame_bytes + 4,
+                        //ctx.encoder_ppBuffer_out->nFilledLen,
                         keyframe,
                         video_frame_record_timestamp,
                         (int32_t)0,
                         TOXAV_ENCODER_CODEC_USED_H264,
                         vc->log
                     );
+        free(buf);
 
-      
-            if (res < 0) {
-                LOGGER_WARNING(vc->log, "Could not send video frame: %s", strerror(errno));
-                return TOXAV_ERR_SEND_FRAME_RTP_FAILED;
-            }
-
-      say("Read from output buffer and wrote to output file %d/%d, frame %d", ctx.encoder_ppBuffer_out->nFilledLen, ctx.encoder_ppBuffer_out->nAllocLen, frame_out + 1);
-  }
-  if(ctx.encoder_output_buffer_available || !frame_out) {
-      // Buffer flushed, request a new buffer to be filled by the encoder component
-      ctx.encoder_output_buffer_available = 0;
-      if((r = OMX_FillThisBuffer(ctx.encoder, ctx.encoder_ppBuffer_out)) != OMX_ErrorNone) {
-          omx_die(r, "Failed to request filling of the output buffer on encoder output port 201");
-      }
-  }
-  
-  // Would be better to use signaling here but hey this works too
-  usleep(10);
+        
+        if (res < 0) {
+            LOGGER_WARNING(vc->log, "Could not send video frame: %s", strerror(errno));
+            return TOXAV_ERR_SEND_FRAME_RTP_FAILED;
+        }
+    }
 }
 
 
 int vc_reconfigure_encoder_h264_omx(Logger *log, VCSession *vc, uint32_t bit_rate, uint16_t width, uint16_t height,
                                int16_t kf_max_dist)
 {
-  //printf("h264_omx reconfigure not implemented :(\n");
-  return -1;
+  say("h264_omx reconfigure not implemented :( (width=%d height=%d bitrate=%d)\n", width, height, bit_rate);
+  return 0;
 }

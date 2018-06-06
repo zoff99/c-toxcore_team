@@ -1,13 +1,13 @@
-project('toxcore', 'c', license: 'GPL')
+project('toxcore', ['c', 'cpp'], license: 'GPL')
 
 compiler = meson.get_compiler('c')
 
-raspberrypi_3 = false
+raspberrypi_3 = true
 
 if (raspberrypi_3)
-add_global_arguments('-O3', '-g', '-marm', '-march=armv8-a+crc', '-mtune=cortex-a53', '-mfpu=neon-fp-armv8',
-	'-mfloat-abi=hard', '-ftree-vectorize', '-funsafe-math-optimizations',
-	language: ['c', 'c++'])
+#add_global_arguments('-O3', '-g', '-marm', '-march=armv8-a+crc', '-mtune=cortex-a53', '-mfpu=neon-fp-armv8',
+#	'-mfloat-abi=hard', '-ftree-vectorize', '-funsafe-math-optimizations',
+#	language: ['c', 'c++'])
 endif
 
 sodium = dependency('libsodium')
@@ -23,17 +23,20 @@ x264 = dependency('x264')
 # av_test dependencies
 opencv = dependency('opencv', required: false)
 portaudio = dependency('portaudio-2.0', required: false)
+sndfile = dependency('sndfile', required: false)
 
 subdir('toxcore')
 subdir('toxav')
-
 subdir('tox')
 
 incdir = include_directories('.')
 
+toxcore_deps = [threads]
+
 toxcore = declare_dependency(
 	link_with: libtoxcore,
 	include_directories: incdir,
+	dependencies: toxcore_deps,
 	sources: headers
 	)
 
@@ -43,14 +46,14 @@ toxav = declare_dependency(
 	)
 
 
-executable('av_test', 'testing/av_test.c',
-	dependencies: [toxcore, toxav, opencv, portaudio],
+executable('av_test', 'testing/av_test.cpp',
+	dependencies: [toxcore, toxav, opencv, portaudio, threads, omx_dep],
 	c_args: ['-x', 'c++']
 )
 
 executable('DHT_test', 'testing/DHT_test.c',
-	link_with: libtoxcore)
+	dependencies: toxcore)
 
 executable('Messenger_test', 'testing/Messenger_test.c',
-	link_with: libtoxcore)
+	dependencies: toxcore)
 

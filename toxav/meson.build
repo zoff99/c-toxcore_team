@@ -32,14 +32,12 @@ if (raspberrypi_3)
 		bcm_prefix + 'include',
 		bcm_prefix + 'include/interface/vmcs_host/linux',
 		bcm_prefix + 'include/interface/vcos/pthreads',
-		'ilclient'
 		)
 
     omx_dep = declare_dependency(
         include_directories: bcm_incdirs,
 		compile_args: bcm_defines,
 		link_args: ['-L/opt/vc/lib', '-lbcm_host', '-lvcos','-lopenmaxil'],
-		sources : files('ilclient/ilclient.c', 'ilclient/ilcore.c')
 
     )
 endif

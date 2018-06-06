@@ -151,7 +151,7 @@ bool vc_encode_frame_h264(VCSession *vc, struct RTPSession *rtp, uint16_t width,
                                         &(vc->h264_out_pic));
 
     if (i_frame_size < 0) {
-        // some error
+        // some errorbcm_ho
     } else if (i_frame_size == 0) {
         // zero size output
     } else {
@@ -185,17 +185,26 @@ bool vc_encode_frame_h264(VCSession *vc, struct RTPSession *rtp, uint16_t width,
         const uint32_t frame_length_in_bytes = i_frame_size;
         const int keyframe = (int)vc->h264_out_pic.b_keyframe;
 
+        uint8_t* buf = malloc(frame_length_in_bytes + 4);
+        memcpy(buf + 4, nal->p_payload, frame_length_in_bytes);
+        buf[0] = 0;
+        buf[1] = 0;
+        buf[2] = 0;
+        buf[3] = 1;
+
         res = rtp_send_data
                     (
                         rtp,
-                        (const uint8_t *)nal->p_payload,
-                        frame_length_in_bytes,
+                        //(const uint8_t *)nal->p_payload,
+                        buf,
+                        frame_length_in_bytes + 4,
                         keyframe,
                         video_frame_record_timestamp,
                         (int32_t)0,
                         TOXAV_ENCODER_CODEC_USED_H264,
                         vc->log
                     );
+        free(buf);
 
         video_frame_record_timestamp++;
 
@@ -336,7 +345,7 @@ int vc_reconfigure_encoder_h264(Logger *log, VCSession *vc, uint32_t bit_rate, u
         param.i_timebase_num = 1;       // 1 ms = timebase units = (1/1000)s
         param.i_timebase_den = 1000;   // 1 ms = timebase units = (1/1000)s
         param.b_repeat_headers = 1;
-        param.b_annexb = 1;
+        param.b_annexb = 0;
 
         param.rc.f_rate_tolerance = VIDEO_F_RATE_TOLERANCE_H264;
         param.rc.i_vbv_buffer_size = (bit_rate / 1000) * VIDEO_BUF_FACTOR_H264;

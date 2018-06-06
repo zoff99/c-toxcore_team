@@ -207,13 +207,15 @@ VCSession *vc_new(Logger *log, ToxAV *av, uint32_t friend_number, toxav_video_re
     vc->video_rc_max_quantizer_prev = vc->video_rc_max_quantizer;
     vc->video_rc_min_quantizer = TOXAV_ENCODER_VP8_RC_MIN_QUANTIZER_NORMAL;
     vc->video_rc_min_quantizer_prev = vc->video_rc_min_quantizer;
-    vc->video_encoder_coded_used = TOXAV_ENCODER_CODEC_USED_VP8; // DEBUG: H264 !!
+    //vc->video_encoder_coded_used = TOXAV_ENCODER_CODEC_USED_VP8; // DEBUG: H264 !!
+    vc->video_encoder_coded_used = TOXAV_ENCODER_CODEC_USED_H264; // DEBUG: H264 !!
     vc->video_encoder_coded_used_prev = vc->video_encoder_coded_used;
     vc->video_keyframe_method = TOXAV_ENCODER_KF_METHOD_NORMAL;
     vc->video_keyframe_method_prev = vc->video_keyframe_method;
     vc->video_decoder_error_concealment = VIDEO__VP8_DECODER_ERROR_CONCEALMENT;
     vc->video_decoder_error_concealment_prev = vc->video_decoder_error_concealment;
-    vc->video_decoder_codec_used = TOXAV_ENCODER_CODEC_USED_VP8; // DEBUG: H264 !!
+    //vc->video_decoder_codec_used = TOXAV_ENCODER_CODEC_USED_VP8; // DEBUG: H264 !!
+    vc->video_encoder_coded_used = TOXAV_ENCODER_CODEC_USED_H264; // DEBUG: H264 !!
     // options ---
 
 

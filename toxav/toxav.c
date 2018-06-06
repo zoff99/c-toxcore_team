@@ -131,6 +131,7 @@ void call_kill_transmission(ToxAVCall *call);
 
 ToxAV *toxav_new(Tox *tox, TOXAV_ERR_NEW *error)
 {
+
     TOXAV_ERR_NEW rc = TOXAV_ERR_NEW_OK;
     ToxAV *av = NULL;
     Messenger *m = (Messenger *)tox;
