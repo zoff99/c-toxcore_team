@@ -2,13 +2,13 @@ project('toxcore', ['c', 'cpp'], license: 'GPL')
 
 compiler = meson.get_compiler('c')
 
-raspberrypi_3 = true
+raspberrypi = true
 
-if (raspberrypi_3)
+#if (raspberrypi_3)
 #add_global_arguments('-O3', '-g', '-marm', '-march=armv8-a+crc', '-mtune=cortex-a53', '-mfpu=neon-fp-armv8',
 #	'-mfloat-abi=hard', '-ftree-vectorize', '-funsafe-math-optimizations',
 #	language: ['c', 'c++'])
-endif
+#endif
 
 sodium = dependency('libsodium')
 
@@ -45,11 +45,14 @@ toxav = declare_dependency(
 	include_directories: incdir
 	)
 
-
-executable('av_test', 'testing/av_test.cpp',
-	dependencies: [toxcore, toxav, opencv, portaudio, threads, omx_dep],
-	c_args: ['-x', 'c++']
-)
+if opencv.found() and portaudio.found() and sndfile.found()
+	executable('av_test', 'testing/av_test.c',
+		dependencies: [toxcore, toxav, opencv, portaudio, threads, omx_dep],
+		c_args: ['-x', 'c++']
+	)
+else
+	message('Not building av_test due to lack of dependencies')
+endif
 
 executable('DHT_test', 'testing/DHT_test.c',
 	dependencies: toxcore)

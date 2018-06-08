@@ -23,7 +23,7 @@ libtoxav_files = files(
 
 omx_dep = []
 
-if (raspberrypi_3)
+if (raspberrypi)
     libtoxav_files += files('../toxav/h264_omx.c')
     bcm_defines = ['-DRASPBERRY_PI', '-DOMX_SKIP64BIT', '-DUSE_VCHIQ_ARM']
 
