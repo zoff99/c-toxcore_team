@@ -17,6 +17,26 @@ libtoxav_files = files(
 	'../toxav/toxav_old.c',
 )
 
+omx_dep = []
+
+if (raspberrypi)
+    libtoxav_files += files('../toxav/h264_omx.c')
+    bcm_defines = ['-DRASPBERRY_PI', '-DOMX_SKIP64BIT', '-DUSE_VCHIQ_ARM']
+
+	bcm_prefix = '/opt/vc/'
+	bcm_incdirs = include_directories(
+		bcm_prefix + 'include',
+		bcm_prefix + 'include/interface/vmcs_host/linux',
+		bcm_prefix + 'include/interface/vcos/pthreads',
+		)
+
+    omx_dep = declare_dependency(
+        include_directories: bcm_incdirs,
+		compile_args: bcm_defines,
+		link_args: ['-L/opt/vc/lib', '-lbcm_host', '-lvcos','-lopenmaxil'],
+
+    )
+endif
 
 libtoxav = static_library(
 	'toxav',
