@@ -1,4 +1,4 @@
-project('toxcore', ['c', 'cpp'], license: 'GPL')
+project('toxcore', ['c'], license: 'GPL')
 
 compiler = meson.get_compiler('c')
 
@@ -46,10 +46,11 @@ toxav = declare_dependency(
 	)
 
 if opencv.found() and portaudio.found() and sndfile.found()
-	executable('av_test', 'testing/av_test.c',
-		dependencies: [toxcore, toxav, opencv, portaudio, threads, omx_dep],
-		c_args: ['-x', 'c++']
-	)
+# Currently broken because of reasons
+#	executable('av_test', 'testing/av_test.c',
+#		dependencies: [toxcore, toxav, opencv, portaudio, threads, omx_dep],
+#		c_args: ['-x', 'c++']
+#	)
 else
 	message('Not building av_test due to lack of dependencies')
 endif
