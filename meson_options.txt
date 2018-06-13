@@ -1,0 +1,1 @@
+option('h264_omx', type : 'boolean', value : false, yield : true, description : 'Build H264 OMX support on Raspberry Pi')

@@ -23,7 +23,7 @@ omx_dep = []
 
 if (raspberrypi)
     libtoxav_files += files('codecs/h264_omx_raspi/codec.c')
-    bcm_defines = ['-DRASPBERRY_PI', '-DOMX_SKIP64BIT', '-DUSE_VCHIQ_ARM']
+    bcm_defines = ['-DRASPBERRY_PI_OMX', '-DOMX_SKIP64BIT', '-DUSE_VCHIQ_ARM']
 
 	bcm_prefix = '/opt/vc/'
 	bcm_incdirs = include_directories(

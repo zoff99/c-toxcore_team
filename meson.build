@@ -2,7 +2,7 @@ project('toxcore', ['c'], license: 'GPL')
 
 compiler = meson.get_compiler('c')
 
-raspberrypi = true
+raspberrypi = get_option('h264_omx')
 
 #if (raspberrypi_3)
 #add_global_arguments('-O3', '-g', '-marm', '-march=armv8-a+crc', '-mtune=cortex-a53', '-mfpu=neon-fp-armv8',
