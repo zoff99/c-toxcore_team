@@ -1,26 +1,28 @@
 libtoxav_files = files(
-	'../toxav/rtp.c',
-	'../toxav/msi.h',
-	'../toxav/msi.c',
-	'../toxav/groupav.h',
-	'../toxav/groupav.c',
-	'../toxav/audio.h',
-	'../toxav/audio.c',
-	'../toxav/video.h',
-	'../toxav/video.c',
-	'../toxav/bwcontroller.h',
-	'../toxav/bwcontroller.c',
-	'../toxav/ring_buffer.h',
-	'../toxav/ring_buffer.c',
-	'../toxav/toxav.h',
-	'../toxav/toxav.c',
-	'../toxav/toxav_old.c',
+	'rtp.c',
+	'msi.h',
+	'msi.c',
+	'groupav.h',
+	'groupav.c',
+	'audio.h',
+	'audio.c',
+	'video.h',
+	'video.c',
+	'bwcontroller.h',
+	'bwcontroller.c',
+	'ring_buffer.h',
+	'ring_buffer.c',
+	'toxav.h',
+	'toxav.c',
+	'toxav_old.c',
+	'codecs/vpx/codec.c',
+	'codecs/h264/codec.c',
 )
 
 omx_dep = []
 
 if (raspberrypi)
-    libtoxav_files += files('../toxav/h264_omx.c')
+    libtoxav_files += files('codecs/h264_omx_raspi/codec.c')
     bcm_defines = ['-DRASPBERRY_PI', '-DOMX_SKIP64BIT', '-DUSE_VCHIQ_ARM']
 
 	bcm_prefix = '/opt/vc/'
@@ -38,13 +40,11 @@ if (raspberrypi)
     )
 endif
 
+
 libtoxav = static_library(
 	'toxav',
 	libtoxav_files,
-    dependencies: [opus, vpx, avcodec, avutil, x264]
-  
-  #include_directories : inc_common,
-  #cpp_args: internal_args,
+	dependencies: [opus, vpx, avcodec, avutil, x264, omx_dep],
 )
 
 

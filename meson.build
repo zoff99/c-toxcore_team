@@ -1,4 +1,4 @@
-project('toxcore', 'c', license: 'GPL')
+project('toxcore', ['c', 'cpp'], license: 'GPL')
 
 compiler = meson.get_compiler('c')
 
@@ -23,17 +23,20 @@ x264 = dependency('x264')
 # av_test dependencies
 opencv = dependency('opencv', required: false)
 portaudio = dependency('portaudio-2.0', required: false)
+sndfile = dependency('sndfile', required: false)
 
 subdir('toxcore')
 subdir('toxav')
-
 subdir('tox')
 
 incdir = include_directories('.')
 
+toxcore_deps = [threads]
+
 toxcore = declare_dependency(
 	link_with: libtoxcore,
 	include_directories: incdir,
+	dependencies: toxcore_deps,
 	sources: headers
 	)
 
@@ -52,8 +55,7 @@ else
 endif
 
 executable('DHT_test', 'testing/DHT_test.c',
-	link_with: libtoxcore)
+	dependencies: toxcore)
 
 executable('Messenger_test', 'testing/Messenger_test.c',
-	link_with: libtoxcore)
-
+	dependencies: toxcore)
