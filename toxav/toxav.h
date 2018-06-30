@@ -565,6 +565,11 @@ typedef enum TOXAV_ERR_BIT_RATE_SET {
 bool toxav_bit_rate_set(ToxAV *av, uint32_t friend_number, int32_t audio_bit_rate, int32_t video_bit_rate,
                         TOXAV_ERR_BIT_RATE_SET *error);
 
+/* dummy */
+bool toxav_video_set_bit_rate(ToxAV *av, uint32_t friend_number, int32_t video_bit_rate, TOXAV_ERR_BIT_RATE_SET *error);
+bool toxav_audio_set_bit_rate(ToxAV *av, uint32_t friend_number, int32_t audio_bit_rate, TOXAV_ERR_BIT_RATE_SET *error);
+/* dummy */
+
 /**
  * The function type for the bit_rate_status callback. The event is triggered
  * when the network becomes too saturated for current bit rates at which
@@ -855,6 +860,7 @@ typedef enum TOXAV_OPTIONS_OPTION {
     TOXAV_DECODER_ERROR_CONCEALMENT = 7,
     TOXAV_ENCODER_CODEC_USED = 9,
     TOXAV_ENCODER_KF_METHOD = 10,
+    TOXAV_ENCODER_VIDEO_BITRATE_AUTOSET = 11,
 } TOXAV_OPTIONS_OPTION;
 
 
