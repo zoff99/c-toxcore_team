@@ -294,18 +294,18 @@ uint8_t vc_iterate(VCSession *vc, Messenger *m, uint8_t skip_video_flag, uint64_
 
     tsb_get_range_in_buffer((TSBuffer *)vc->vbuf_raw, &timestamp_min, &timestamp_max);
 
-#define MIN_AV_BUFFERING_MS 250
-#define AV_ADJUSTMENT_BASE_MS 100
+#define MIN_AV_BUFFERING_MS (250)
+#define AV_ADJUSTMENT_BASE_MS (100)
 
-    if (vc->rountrip_time_ms > (-vc->timestamp_difference_adjustment - AV_ADJUSTMENT_BASE_MS)) {
+    if (vc->rountrip_time_ms > ((-vc->timestamp_difference_adjustment) - AV_ADJUSTMENT_BASE_MS)) {
         // drift
-        if (vc->timestamp_difference_adjustment < -MIN_AV_BUFFERING_MS) {
-            vc->timestamp_difference_adjustment = vc->timestamp_difference_adjustment - 2;
-        }
-    } else if (vc->rountrip_time_ms < (-vc->timestamp_difference_adjustment - AV_ADJUSTMENT_BASE_MS)) {
+        vc->timestamp_difference_adjustment = vc->timestamp_difference_adjustment - 1;
+        LOGGER_DEBUG(vc->log, "ADJ:-2 %d", vc->timestamp_difference_adjustment);
+    } else if (vc->rountrip_time_ms < ((-vc->timestamp_difference_adjustment) - AV_ADJUSTMENT_BASE_MS)) {
         // drift
-        if (vc->timestamp_difference_adjustment < -MIN_AV_BUFFERING_MS) {
-            vc->timestamp_difference_adjustment = vc->timestamp_difference_adjustment + 2;
+        if (vc->timestamp_difference_adjustment < (-MIN_AV_BUFFERING_MS)) {
+            vc->timestamp_difference_adjustment = vc->timestamp_difference_adjustment + 1;
+            LOGGER_DEBUG(vc->log, "ADJ:++2 %d", vc->timestamp_difference_adjustment);
         }
     }
 
@@ -364,17 +364,18 @@ uint8_t vc_iterate(VCSession *vc, Messenger *m, uint8_t skip_video_flag, uint64_
         vc->video_play_delay = ((current_time_monotonic() + vc->timestamp_difference_to_sender) - timestamp_out_);
         vc->video_frame_buffer_entries = (uint32_t)tsb_size((TSBuffer *)vc->vbuf_raw);
 
-        LOGGER_WARNING(vc->log, "seq:%d FC:%d min=%ld max=%ld want=%d got=%d diff=%d rm=%d pdelay=%d adj=%d",
-                       (int)header_v3_0->sequnum,
-                       (int)tsb_size((TSBuffer *)vc->vbuf_raw),
-                       timestamp_min,
-                       timestamp_max,
-                       (int)timestamp_want_get,
-                       (int)timestamp_out_,
-                       ((int)timestamp_want_get - (int)timestamp_out_),
-                       (int)removed_entries,
-                       (int)vc->video_play_delay,
-                       (int)vc->timestamp_difference_adjustment);
+        LOGGER_DEBUG(vc->log, "seq:%d FC:%d min=%ld max=%ld want=%d got=%d diff=%d rm=%d pdelay=%d adj=%d rtt=%d",
+                     (int)header_v3_0->sequnum,
+                     (int)tsb_size((TSBuffer *)vc->vbuf_raw),
+                     timestamp_min,
+                     timestamp_max,
+                     (int)timestamp_want_get,
+                     (int)timestamp_out_,
+                     ((int)timestamp_want_get - (int)timestamp_out_),
+                     (int)removed_entries,
+                     (int)vc->video_play_delay,
+                     (int)vc->timestamp_difference_adjustment,
+                     (int)vc->rountrip_time_ms);
 
         uint16_t buf_size = tsb_size((TSBuffer *)vc->vbuf_raw);
         int32_t diff_want_to_got = (int)timestamp_want_get - (int)timestamp_out_;

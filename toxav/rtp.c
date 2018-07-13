@@ -643,7 +643,7 @@ static int handle_rtp_packet(Messenger *m, uint32_t friendnumber, const uint8_t 
                              pkg_buf[6], pkg_buf[7], pkg_buf[8], pkg_buf[9]);
 
                 int result = send_custom_lossless_packet(m, friendnumber, pkg_buf, pkg_buf_len);
-
+                // int result = m_send_custom_lossy_packet(m, friendnumber, pkg_buf, pkg_buf_len);
 
             } else if (data[1] == PACKET_TOXAV_COMM_CHANNEL_DUMMY_NTP_ANSWER) {
 
@@ -791,6 +791,7 @@ static int handle_rtp_packet(Messenger *m, uint32_t friendnumber, const uint8_t 
         pkg_buf[5] = tmp       & 0xFF;
 
         int result = send_custom_lossless_packet(m, friendnumber, pkg_buf, pkg_buf_len);
+        // int result = m_send_custom_lossy_packet(m, friendnumber, pkg_buf, pkg_buf_len);
     }
 
     // HINT: ask sender for dummy ntp values -------------
